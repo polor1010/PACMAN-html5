@@ -386,7 +386,7 @@ class User {
   newLevel() {
     this.resetPosition();
     this.eaten = 0;
-    console.log("新关卡开始，已吃豆子数重置为0");
+    console.log("新關卡開始，已吃豆子數重置為0");
   }
   
   resetPosition() {
@@ -501,20 +501,38 @@ class User {
     
     block = this.map.block(nextWhole);        
     
-    if ((this.isMidSquare(this.position.y) || this.isMidSquare(this.position.x)) &&
-        block === Pacman.BISCUIT || block === Pacman.PILL) {
-      
-      this.map.setBlock(nextWhole, Pacman.EMPTY);           
-      this.addScore((block === Pacman.BISCUIT) ? 10 : 50);
-      this.eaten += 1;
-      
-      // 检查是否吃完了所有的豆子
-      if (this.eaten >= this.map.totalDots) {
-        this.game.completedLevel();
-      }
-      
-      if (block === Pacman.PILL) { 
-        this.game.eatenPill();
+    if ((this.isMidSquare(this.position.y) || this.isMidSquare(this.position.x))) {
+      if (block === Pacman.BISCUIT || block === Pacman.PILL || 
+          block === Pacman.RED_PILL || block === Pacman.BLUE_PILL) {
+        
+        this.map.setBlock(nextWhole, Pacman.EMPTY);
+        
+        // 根據豆子類型給予不同分數
+        if (block === Pacman.BISCUIT) {
+          this.addScore(10);
+        } else if (block === Pacman.PILL) {
+          this.addScore(50);
+        } else if (block === Pacman.RED_PILL) {
+          this.addScore(30);
+        } else if (block === Pacman.BLUE_PILL) {
+          this.addScore(30);
+        }
+        
+        this.eaten += 1;
+        
+        // 检查是否吃完了所有的豆子
+        if (this.eaten >= this.map.totalDots) {
+          this.game.completedLevel();
+        }
+        
+        // 根據豆子類型觸發不同效果
+        if (block === Pacman.PILL) { 
+          this.game.eatenPill();
+        } else if (block === Pacman.RED_PILL) {
+          this.game.eatenRedPill();
+        } else if (block === Pacman.BLUE_PILL) {
+          this.game.eatenBluePill();
+        }
       }
     }   
             
@@ -616,7 +634,9 @@ class Map {
     const piece = this.map[pos.y][pos.x];
     return piece === Pacman.EMPTY || 
       piece === Pacman.BISCUIT ||
-      piece === Pacman.PILL;
+      piece === Pacman.PILL ||
+      piece === Pacman.RED_PILL ||
+      piece === Pacman.BLUE_PILL;
   }
   
   drawWall(ctx) {
@@ -679,14 +699,17 @@ class Map {
     this.totalDots = 0;
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        if (this.map[y][x] === Pacman.BISCUIT || this.map[y][x] === Pacman.PILL) {
+        if (this.map[y][x] === Pacman.BISCUIT || 
+            this.map[y][x] === Pacman.PILL || 
+            this.map[y][x] === Pacman.RED_PILL || 
+            this.map[y][x] === Pacman.BLUE_PILL) {
           this.totalDots++;
         }
       }
     }
     // 更新全局变量以供地图预览使用
     window.pacmanMapLevel = this.level;
-    console.log(`当前地图(${this.level + 1})豆子总数: ${this.totalDots}`);
+    console.log(`當前地圖(${this.level + 1})豆子總數: ${this.totalDots}`);
   }
 
   switchMap() {
@@ -695,7 +718,7 @@ class Map {
     this.reset();
     // 更新全局变量以供地图预览使用
     window.pacmanMapLevel = this.level;
-    return `已切换到地图 ${this.level + 1}`;
+    return `已切換到地圖 ${this.level + 1}`;
   }
 
   block(pos) {
@@ -715,14 +738,39 @@ class Map {
     
     for (i = 0; i < this.height; i += 1) {
       for (j = 0; j < this.width; j += 1) {
+        // 繪製不同類型的藥丸
         if (this.map[i][j] === Pacman.PILL) {
           ctx.beginPath();
-
           ctx.fillStyle = "#000";
           ctx.fillRect((j * this.blockSize), (i * this.blockSize), 
                        this.blockSize, this.blockSize);
-
           ctx.fillStyle = "#FFF";
+          ctx.arc((j * this.blockSize) + this.blockSize / 2,
+                  (i * this.blockSize) + this.blockSize / 2,
+                  Math.abs(5 - (this.pillSize/3)), 
+                  0, 
+                  Math.PI * 2, false); 
+          ctx.fill();
+          ctx.closePath();
+        } else if (this.map[i][j] === Pacman.RED_PILL) {
+          ctx.beginPath();
+          ctx.fillStyle = "#000";
+          ctx.fillRect((j * this.blockSize), (i * this.blockSize), 
+                       this.blockSize, this.blockSize);
+          ctx.fillStyle = "#FF0000";  // 紅色
+          ctx.arc((j * this.blockSize) + this.blockSize / 2,
+                  (i * this.blockSize) + this.blockSize / 2,
+                  Math.abs(5 - (this.pillSize/3)), 
+                  0, 
+                  Math.PI * 2, false); 
+          ctx.fill();
+          ctx.closePath();
+        } else if (this.map[i][j] === Pacman.BLUE_PILL) {
+          ctx.beginPath();
+          ctx.fillStyle = "#000";
+          ctx.fillRect((j * this.blockSize), (i * this.blockSize), 
+                       this.blockSize, this.blockSize);
+          ctx.fillStyle = "#0000FF";  // 藍色
           ctx.arc((j * this.blockSize) + this.blockSize / 2,
                   (i * this.blockSize) + this.blockSize / 2,
                   Math.abs(5 - (this.pillSize/3)), 
@@ -754,7 +802,7 @@ class Map {
   drawBlock(y, x, ctx) {
     const layout = this.map[y][x];
 
-    if (layout === Pacman.PILL) {
+    if (layout === Pacman.PILL || layout === Pacman.RED_PILL || layout === Pacman.BLUE_PILL) {
       return;
     }
 
@@ -898,6 +946,59 @@ var PACMAN = (function () {
         var width = ctx.measureText(text).width,
             x     = ((map.width * map.blockSize) - width) / 2;        
         ctx.fillText(text, x, (map.height * 10) + 8);
+        
+        // 保存最後繪製的文本信息，以便之後清除
+        dialog.lastText = {
+            x: x,
+            y: (map.height * 10) + 8,
+            width: width,
+            height: 14 // 文本高度
+        };
+    }
+    
+    // 添加清除對話框的函數
+    function clearDialog() {
+        if (dialog.lastText) {
+            // 如果已有文字，則重繪該區域
+            
+            // 1. 重繪地圖元素（只重繪需要的區域）
+            const y1 = Math.floor((dialog.lastText.y - dialog.lastText.height) / map.blockSize);
+            const y2 = Math.ceil((dialog.lastText.y + 4) / map.blockSize);
+            const x1 = Math.floor((dialog.lastText.x - 2) / map.blockSize);
+            const x2 = Math.ceil((dialog.lastText.x + dialog.lastText.width + 4) / map.blockSize);
+            
+            // 重繪覆蓋範圍內的遊戲區域
+            ctx.fillStyle = "#000";
+            ctx.fillRect(
+                dialog.lastText.x - 2,
+                dialog.lastText.y - dialog.lastText.height,
+                dialog.lastText.width + 4,
+                dialog.lastText.height + 4
+            );
+            
+            // 如果文字在遊戲區域內，重繪該部分的地圖
+            if (y1 < map.height) {
+                for (let y = y1; y <= Math.min(y2, map.height - 1); y++) {
+                    for (let x = x1; x <= Math.min(x2, map.width - 1); x++) {
+                        if (x >= 0 && y >= 0) {
+                            map.drawBlock(y, x, ctx);
+                        }
+                    }
+                }
+                
+                // 重繪藥丸
+                map.drawPills(ctx);
+            }
+            
+            // 2. 重繪頁腳（如果對話框在頁腳區域）
+            var topLeft = (map.height * map.blockSize);
+            if (dialog.lastText.y >= topLeft) {
+                drawFooter();
+            }
+            
+            // 清除保存的文字信息
+            dialog.lastText = null;
+        }
     }
 
     function soundDisabled() {
@@ -914,7 +1015,7 @@ var PACMAN = (function () {
         setState(COUNTDOWN);
         
         // 在关卡开始时提醒用户可以使用 H 键查看帮助
-        console.log("关卡开始！按 H 键可以查看功能按键帮助");
+        console.log("關卡開始！按 H 鍵可以查看功能按鍵幫助");
     }    
 
     function startNewGame() {
@@ -1150,7 +1251,7 @@ var PACMAN = (function () {
         // 切换到下一个地图 (循环: 0 -> 1 -> 2 -> 3 -> 0)
         map.level = (map.level + 1) % 4;
         
-        console.log(`完成关卡！切换到地图 ${map.level + 1}，关卡 ${level}`);
+        console.log(`完成關卡！切換到地圖 ${map.level + 1}，關卡 ${level}`);
         map.reset();
         user.newLevel();
         startLevel();
@@ -1184,7 +1285,9 @@ var PACMAN = (function () {
         map   = new Map(blockSize);
         user  = new User({ 
             "completedLevel" : completedLevel, 
-            "eatenPill"      : eatenPill 
+            "eatenPill"      : eatenPill,
+            "eatenRedPill"   : function() { return PACMAN.eatenRedPill(); },
+            "eatenBluePill"  : function() { return PACMAN.eatenBluePill(); }
         }, map);
 
         for (i = 0, len = ghostSpecs.length; i < len; i += 1) {
@@ -1226,10 +1329,10 @@ var PACMAN = (function () {
     };
         
     function loaded() {
-        dialog("按 N 键开始新游戏\n按↑↓←→控制移动\n按 H 键查看全部功能");
+        dialog("按 N 鍵開始新遊戲\n按↑↓←→控制移動\n按 H 鍵查看全部功能");
         
         // 在控制台显示帮助信息，提醒用户可用的功能按键
-        console.log("游戏已加载完成，按 H 键可以查看功能按键帮助");
+        console.log("遊戲已加載完成，按 H 鍵可以查看功能按鍵幫助");
         
         document.addEventListener("keydown", keyDown, true);
         document.addEventListener("keypress", keyPress, true); 
@@ -1268,6 +1371,131 @@ var PACMAN = (function () {
             const result = showAllMaps();
             console.log(result);
             return result;
+        },
+        "eatenPill": eatenPill,
+        "eatenRedPill": function() {
+            audio.play("eatpill");
+            
+            // 設置速度提升總時間（秒）
+            const speedupTime = 5;
+            let remainingTime = speedupTime;
+            
+            // 不再顯示速度提升的對話框
+            // dialog(`Speed Boost in: ${remainingTime}`);
+            
+            // 增加Pacman的速度
+            const originalGetNewCoord = User.prototype.getNewCoord;
+            User.prototype.getNewCoord = function(dir, current) {
+                const coord = originalGetNewCoord.call(this, dir, current);
+                // 提升20%的速度
+                coord.x = current.x + (coord.x - current.x) * 1.2;
+                coord.y = current.y + (coord.y - current.y) * 1.2;
+                return coord;
+            };
+            
+            // 創建倒數計時器（僅用於計時，不顯示文字）
+            const countdownInterval = setInterval(function() {
+                if (state === PAUSE) return; // 如果遊戲暫停，不做任何事
+                
+                remainingTime--;
+                if (remainingTime <= 0) {
+                    clearInterval(countdownInterval);
+                }
+                // 不再顯示和更新倒數文字
+                // clearDialog();
+                // dialog(`Speed Boost in: ${remainingTime}`);
+            }, 1000);
+            
+            // 5秒後恢復原來的速度
+            setTimeout(function() {
+                clearInterval(countdownInterval); // 清除倒數計時器
+                
+                if (state === PAUSE) return; // 如果遊戲暫停，不做任何事
+                User.prototype.getNewCoord = originalGetNewCoord;
+                
+                // 不再顯示恢復提示
+                // clearDialog();
+                // dialog("Speed Restored");
+                // setTimeout(function() {
+                //     if (state === PAUSE) return;
+                //     clearDialog();
+                // }, 1000);
+            }, speedupTime * 1000);
+        },
+        "eatenBluePill": function() {
+            audio.play("eatpill");
+            
+            // 設置凍結總時間（秒）
+            const freezeTime = 3;
+            let remainingTime = freezeTime;
+            
+            // 不再顯示鬼魂凍結的對話框
+            // dialog(`Ghost Freeze in: ${remainingTime}`);
+            
+            // 儲存鬼魂原來的方向和移動能力
+            const ghostStates = [];
+            for (let i = 0; i < ghosts.length; i++) {
+                // 保存當前狀態
+                ghostStates.push({
+                    direction: ghosts[i].direction,
+                    originalMove: ghosts[i].move
+                });
+                
+                // 凍結鬼魂，但不改變方向（避免與 NONE 衝突）
+                // 取而代之的是覆寫 move 方法，使其返回相同的位置
+                ghosts[i].move = function(ctx) {
+                    const oldPos = this.position;
+                    // 繪製凍結效果
+                    ctx.fillStyle = "rgba(0, 100, 255, 0.3)";
+                    ctx.fillRect(
+                        (oldPos.x/10) * map.blockSize, 
+                        (oldPos.y/10) * map.blockSize, 
+                        map.blockSize, 
+                        map.blockSize
+                    );
+                    return {
+                        "new": oldPos,
+                        "old": oldPos
+                    };
+                };
+            }
+            
+            // 創建倒數計時器（僅用於計時，不顯示文字）
+            const countdownInterval = setInterval(function() {
+                if (state === PAUSE) return; // 如果遊戲暫停，不做任何事
+                
+                remainingTime--;
+                if (remainingTime <= 0) {
+                    clearInterval(countdownInterval);
+                }
+                // 不再顯示和更新倒數文字
+                // clearDialog();
+                // dialog(`Ghost Freeze in: ${remainingTime}`);
+            }, 1000);
+            
+            // 3秒後恢復鬼魂的移動
+            setTimeout(function() {
+                clearInterval(countdownInterval); // 清除倒數計時器
+                
+                if (state === PAUSE) return; // 如果遊戲暫停，不做任何事
+                
+                for (let i = 0; i < ghosts.length; i++) {
+                    if (i < ghostStates.length) {
+                        // 恢復原來的方向
+                        ghosts[i].direction = ghostStates[i].direction;
+                        // 恢復原來的移動功能
+                        ghosts[i].move = ghostStates[i].originalMove;
+                    }
+                }
+                
+                // 不再顯示恢復提示
+                // clearDialog();
+                // dialog("Ghosts Released");
+                // setTimeout(function() {
+                //     if (state === PAUSE) return;
+                //     clearDialog();
+                // }, 1000);
+            }, freezeTime * 1000);
         }
     };
     
@@ -1300,6 +1528,8 @@ Pacman.BISCUIT = 1;
 Pacman.EMPTY   = 2;
 Pacman.BLOCK   = 3;
 Pacman.PILL    = 4;
+Pacman.RED_PILL = 5;
+Pacman.BLUE_PILL = 6;
 
 Pacman.MAP = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -1318,7 +1548,7 @@ Pacman.MAP = [
 	[0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0],
 	[0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
 	[0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0],
-	[0, 4, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 4, 0],
+	[0, 6, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 6, 0],
 	[0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0],
 	[0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0],
 	[0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
@@ -1343,7 +1573,7 @@ Pacman.MAP_2 = [
     [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
     [0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0],
     [0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    [0, 4, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 4, 0],
+    [0, 6, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 6, 0],
     [0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0],
     [0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
@@ -1362,14 +1592,14 @@ Pacman.MAP_3 = [
     [0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0],
     [0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0],
     [0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
-    [0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0],
+    [0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0],
     [0, 0, 0, 0, 1, 0, 1, 0, 1, 3, 1, 0, 1, 0, 1, 0, 0, 0, 0],
     [2, 2, 2, 0, 1, 0, 1, 1, 1, 3, 1, 1, 1, 0, 1, 0, 2, 2, 2],
-    [0, 0, 0, 0, 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-    [0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0],
+    [0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0],
     [0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
     [0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0],
-    [0, 4, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 4, 0],
+    [0, 6, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 6, 0],
     [0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0],
     [0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0],
     [0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0],
@@ -1395,7 +1625,7 @@ Pacman.MAP_4 = [
     [0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0],
     [0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0],
     [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
-    [0, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 0],
+    [0, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 0],
     [0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0],
     [0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0],
     [0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
@@ -1877,11 +2107,11 @@ function showHelp() {
 
 /**
  * 显示所有地图的布局
- * 创建一个模态窗口，同时展示三个地图的布局预览
+ * 创建一个模态窗口，同时展示所有地图的布局预览
  * @returns {string} - 操作结果信息
  */
 function showAllMaps() {
-  console.log("🗺️ 显示所有地图预览...");
+  console.log("顯示所有地圖預覽...");
   
   // 检查是否已存在地图预览面板
   let mapsPanel = document.getElementById('pacman-maps-panel');
@@ -1893,7 +2123,7 @@ function showAllMaps() {
         document.body.removeChild(mapsPanel);
       }
     }, 300);
-    return "地图预览已关闭";
+    return "地圖預覽已關閉";
   }
   
   // 创建地图预览面板
@@ -1920,7 +2150,7 @@ function showAllMaps() {
   
   // 添加标题
   const title = document.createElement('h2');
-  title.textContent = '🗺️ 所有地图预览';
+  title.textContent = '所有地圖預覽';
   title.style.textAlign = 'center';
   title.style.margin = '0 0 20px 0';
   title.style.color = '#FFFF00';
@@ -1967,15 +2197,18 @@ function showAllMaps() {
   mapsContainer.style.display = 'flex';
   mapsContainer.style.justifyContent = 'center';
   mapsContainer.style.flexWrap = 'wrap';
-  mapsContainer.style.gap = '30px';
+  mapsContainer.style.gap = '20px';
   
   // 地图数据
   const maps = [
-    { name: "地图 1", data: Pacman.MAP, color: "#00FFDE" },
-    { name: "地图 2", data: Pacman.MAP_2, color: "#FF0000" },
-    { name: "地图 3", data: Pacman.MAP_3, color: "#FFB8DE" },
-    { name: "地图 4", data: Pacman.MAP_4, color: "#FFB847" }
+    { name: "地圖 1", data: Pacman.MAP, color: "#00FFDE" },
+    { name: "地圖 2", data: Pacman.MAP_2, color: "#FF0000" },
+    { name: "地圖 3", data: Pacman.MAP_3, color: "#FFB8DE" },
+    { name: "地圖 4", data: Pacman.MAP_4, color: "#FFB847" }
   ];
+  
+  // 缩小地图尺寸到原来的80%
+  const cellSize = 9.6; // 原来是12，现在是12 * 0.8 = 9.6
   
   // 创建每个地图的预览
   maps.forEach((mapInfo, index) => {
@@ -1983,20 +2216,23 @@ function showAllMaps() {
     mapContainer.style.display = 'flex';
     mapContainer.style.flexDirection = 'column';
     mapContainer.style.alignItems = 'center';
-    mapContainer.style.padding = '15px';
+    mapContainer.style.padding = '10px';
     mapContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
     mapContainer.style.borderRadius = '10px';
     mapContainer.style.border = `2px solid ${mapInfo.color}`;
+    mapContainer.style.transform = 'scale(0.8)'; // 整体缩小
+    mapContainer.style.transformOrigin = 'center top';
+    mapContainer.style.position = 'relative'; // 添加相对定位，以便绝对定位标记
     
+    // 添加地图标题
     const mapTitle = document.createElement('h3');
     mapTitle.textContent = mapInfo.name;
-    mapTitle.style.margin = '0 0 15px 0';
+    mapTitle.style.margin = '0 0 10px 0';
     mapTitle.style.color = mapInfo.color;
     mapContainer.appendChild(mapTitle);
     
     // 创建地图预览画布
     const canvas = document.createElement('canvas');
-    const cellSize = 12; // 每个格子的尺寸
     canvas.width = mapInfo.data[0].length * cellSize;
     canvas.height = mapInfo.data.length * cellSize;
     const ctx = canvas.getContext('2d');
@@ -2040,6 +2276,30 @@ function showAllMaps() {
             );
             ctx.fill();
             break;
+          case Pacman.RED_PILL: // 紅色能量豆
+            ctx.fillStyle = "#FF0000";
+            ctx.beginPath();
+            ctx.arc(
+              x * cellSize + cellSize / 2,
+              y * cellSize + cellSize / 2,
+              cellSize / 3,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+            break;
+          case Pacman.BLUE_PILL: // 藍色能量豆
+            ctx.fillStyle = "#0000FF";
+            ctx.beginPath();
+            ctx.arc(
+              x * cellSize + cellSize / 2,
+              y * cellSize + cellSize / 2,
+              cellSize / 3,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+            break;
           case 3: // 幽灵屋
             ctx.fillStyle = "rgba(255, 100, 100, 0.3)";
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -2048,21 +2308,26 @@ function showAllMaps() {
       }
     }
     
-    // 如果是当前地图，添加标记
+    mapContainer.appendChild(canvas);
+    
+    // 如果是当前地图，添加标记到地图容器外部
     if (index === window.pacmanMapLevel) {
       const marker = document.createElement('div');
-      marker.textContent = '当前地图';
+      marker.textContent = '當前地圖';
+      marker.style.position = 'absolute';
+      marker.style.top = '-12px';
+      marker.style.right = '-12px';
       marker.style.backgroundColor = mapInfo.color;
       marker.style.color = '#000';
-      marker.style.padding = '5px 10px';
-      marker.style.borderRadius = '10px';
-      marker.style.marginTop = '10px';
+      marker.style.padding = '4px 8px';
+      marker.style.borderRadius = '8px';
       marker.style.fontWeight = 'bold';
-      marker.style.fontSize = '12px';
+      marker.style.fontSize = '11px';
+      marker.style.boxShadow = '0 0 5px rgba(0, 0, 0, 0.5)';
+      marker.style.zIndex = '10';
       mapContainer.appendChild(marker);
     }
     
-    mapContainer.appendChild(canvas);
     mapsContainer.appendChild(mapContainer);
   });
   
@@ -2070,9 +2335,9 @@ function showAllMaps() {
   
   // 添加提示信息
   const tip = document.createElement('p');
-  tip.textContent = '提示：按 A 键或点击 × 可以关闭此预览';
+  tip.textContent = '提示：按 A 鍵或點擊 × 可以關閉此預覽';
   tip.style.textAlign = 'center';
-  tip.style.margin = '20px 0 0 0';
+  tip.style.margin = '15px 0 0 0';
   tip.style.fontSize = '14px';
   tip.style.opacity = '0.7';
   tip.style.fontStyle = 'italic';
@@ -2088,7 +2353,7 @@ function showAllMaps() {
     mapsPanel.style.opacity = '1';
   }, 10);
   
-  return "显示所有地图预览";
+  return "顯示所有地圖預覽";
 }
 
 // 将函数附加到window对象上，使其可以全局访问
