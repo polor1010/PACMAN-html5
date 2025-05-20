@@ -19,8 +19,12 @@ var NONE        = 4,
     COUNTDOWN   = 8,
     EATEN_PAUSE = 9,
     DYING       = 10,
-    Pacman      = {},
-    CHASE_MODE  = false; // 設為 true 則鬼魂會追蹤 Pacman，false 則隨機移動
+    Pacman      = {};
+
+// 將鬼魂模式相關變量設為全局變量，供 HTML 界面訪問
+window.CHASE_MODE = true; // 設為 true 則鬼魂會追蹤 Pacman，false 則隨機移動
+window.GHOST_TEAMWORK = true; // 設為 true 則啟用鬼魂團隊協作
+window.HUNTING_PROBABILITY = 0.65; // 鬼魂主動追逐 Pacman 的概率
 
 Pacman.FPS = 30;
 
@@ -37,6 +41,27 @@ class Ghost {
     this.due = null;
     this.id = id || `ghost-${Math.floor(Math.random() * 1000)}`;
     
+    // 團隊協作的隨機偏移，使不同的鬼魂選擇不同的追逐路徑
+    this.positionBias = {
+      x: Math.random() * 40 - 20, // -20 到 +20 的偏移
+      y: Math.random() * 40 - 20
+    };
+    
+    // 鬼魂的個性，影響行為偏好
+    this.personality = {
+      // 追逐 Pacman 的概率，每個鬼魂略有不同
+      huntingProb: HUNTING_PROBABILITY * (0.8 + Math.random() * 0.4),
+      // 偏好的區域 (左上/右上/左下/右下)
+      preferredQuadrant: Math.floor(Math.random() * 4),
+      // 改變方向的頻率 (越低越頻繁)
+      directionChangeTolerance: 5 + Math.floor(Math.random() * 15)
+    };
+    
+    // 智能追逐相關變量
+    this.lastDecisionPoint = 0; // 上次決策的遊戲刻
+    this.stuckCount = 0; // 卡住計數
+    this.lastPositions = []; // 記錄過去幾個位置，用於檢測卡住
+    
     this.reset();
   }
   
@@ -44,25 +69,25 @@ class Ghost {
     const speed = this.isVunerable() ? 1 : this.isHidden() ? 4 : 2;
     const xSpeed = (dir === LEFT && -speed || dir === RIGHT && speed || 0);
     const ySpeed = (dir === DOWN && speed || dir === UP && -speed || 0);
-
-    return {
+    
+        return {
       "x": this.addBounded(current.x, xSpeed),
       "y": this.addBounded(current.y, ySpeed)
-    };
+        };
   }
 
-  /* Collision detection(walls) is done when a ghost lands on an
-   * exact block, make sure they dont skip over it 
-   */
+    /* Collision detection(walls) is done when a ghost lands on an
+     * exact block, make sure they dont skip over it 
+     */
   addBounded(x1, x2) { 
     const rem = x1 % 10; 
     const result = rem + x2;
-    if (rem !== 0 && result > 10) {
-      return x1 + (10 - rem);
-    } else if(rem > 0 && result < 0) { 
-      return x1 - rem;
-    }
-    return x1 + x2;
+        if (rem !== 0 && result > 10) {
+            return x1 + (10 - rem);
+        } else if(rem > 0 && result < 0) { 
+            return x1 - rem;
+        }
+        return x1 + x2;
   }
   
   isVunerable() { 
@@ -79,8 +104,8 @@ class Ghost {
   
   getRandomDirection() {
     const moves = (this.direction === LEFT || this.direction === RIGHT) 
-      ? [UP, DOWN] : [LEFT, RIGHT];
-    return moves[Math.floor(Math.random() * 2)];
+            ? [UP, DOWN] : [LEFT, RIGHT];
+        return moves[Math.floor(Math.random() * 2)];
   }
   
   reset() {
@@ -92,13 +117,13 @@ class Ghost {
   }
   
   onWholeSquare(x) {
-    return x % 10 === 0;
+        return x % 10 === 0;
   }
-  
+    
   oppositeDirection(dir) { 
-    return dir === LEFT && RIGHT ||
-      dir === RIGHT && LEFT ||
-      dir === UP && DOWN || UP;
+        return dir === LEFT && RIGHT ||
+            dir === RIGHT && LEFT ||
+            dir === UP && DOWN || UP;
   }
 
   makeEatable() {
@@ -112,18 +137,18 @@ class Ghost {
   }
 
   pointToCoord(x) {
-    return Math.round(x / 10);
+        return Math.round(x / 10);
   }
 
   nextSquare(x, dir) {
     const rem = x % 10;
-    if (rem === 0) { 
-      return x; 
-    } else if (dir === RIGHT || dir === DOWN) { 
-      return x + (10 - rem);
-    } else {
-      return x - rem;
-    }
+        if (rem === 0) { 
+            return x; 
+        } else if (dir === RIGHT || dir === DOWN) { 
+            return x + (10 - rem);
+        } else {
+            return x - rem;
+        }
   }
 
   onGridSquare(pos) {
@@ -138,12 +163,12 @@ class Ghost {
     if (this.eatable) { 
       if (this.secondsAgo(this.eatable) > 5) { 
         return this.game.getTick() % 20 > 10 ? "#FFFFFF" : "#0000BB";
-      } else { 
-        return "#0000BB";
-      }
+            } else { 
+                return "#0000BB";
+            }
     } else if(this.eaten) { 
-      return "#222";
-    } 
+            return "#222";
+        } 
     return this.colour;
   }
 
@@ -168,46 +193,46 @@ class Ghost {
     const low  = this.game.getTick() % 10 > 5 ? -3 : 3;
 
     ctx.fillStyle = this.getColour();
-    ctx.beginPath();
+        ctx.beginPath();
 
-    ctx.moveTo(left, base);
+        ctx.moveTo(left, base);
 
-    ctx.quadraticCurveTo(left, top, left + (s/2),  top);
-    ctx.quadraticCurveTo(left + s, top, left+s,  base);
-    
-    // Wavy things at the bottom
-    ctx.quadraticCurveTo(tl-(inc*1), base+high, tl - (inc * 2),  base);
-    ctx.quadraticCurveTo(tl-(inc*3), base+low, tl - (inc * 4),  base);
-    ctx.quadraticCurveTo(tl-(inc*5), base+high, tl - (inc * 6),  base);
-    ctx.quadraticCurveTo(tl-(inc*7), base+low, tl - (inc * 8),  base); 
-    ctx.quadraticCurveTo(tl-(inc*9), base+high, tl - (inc * 10), base); 
+        ctx.quadraticCurveTo(left, top, left + (s/2),  top);
+        ctx.quadraticCurveTo(left + s, top, left+s,  base);
+        
+        // Wavy things at the bottom
+        ctx.quadraticCurveTo(tl-(inc*1), base+high, tl - (inc * 2),  base);
+        ctx.quadraticCurveTo(tl-(inc*3), base+low, tl - (inc * 4),  base);
+        ctx.quadraticCurveTo(tl-(inc*5), base+high, tl - (inc * 6),  base);
+        ctx.quadraticCurveTo(tl-(inc*7), base+low, tl - (inc * 8),  base); 
+        ctx.quadraticCurveTo(tl-(inc*9), base+high, tl - (inc * 10), base); 
 
-    ctx.closePath();
-    ctx.fill();
+        ctx.closePath();
+        ctx.fill();
 
-    ctx.beginPath();
-    ctx.fillStyle = "#FFF";
+        ctx.beginPath();
+        ctx.fillStyle = "#FFF";
     ctx.arc(left + 6, top + 6, s / 6, 0, 300, false);
     ctx.arc((left + s) - 6, top + 6, s / 6, 0, 300, false);
-    ctx.closePath();
-    ctx.fill();
+        ctx.closePath();
+        ctx.fill();
 
     const f = s / 12;
     const off = {};
-    off[RIGHT] = [f, 0];
-    off[LEFT]  = [-f, 0];
-    off[UP]    = [0, -f];
-    off[DOWN]  = [0, f];
+        off[RIGHT] = [f, 0];
+        off[LEFT]  = [-f, 0];
+        off[UP]    = [0, -f];
+        off[DOWN]  = [0, f];
 
-    ctx.beginPath();
-    ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.fillStyle = "#000";
     ctx.arc(left+6+off[this.direction][0], top+6+off[this.direction][1], 
-            s / 15, 0, 300, false);
+                s / 15, 0, 300, false);
     ctx.arc((left+s)-6+off[this.direction][0], top+6+off[this.direction][1], 
-            s / 15, 0, 300, false);
-    ctx.closePath();
-    ctx.fill();
-    
+                s / 15, 0, 300, false);
+        ctx.closePath();
+        ctx.fill();
+
     // 直接在幽灵身上绘制 ID
     const idNumber = this.id.split('-')[1]; // 提取数字部分
     ctx.fillStyle = "#FFFFFF";
@@ -229,31 +254,105 @@ class Ghost {
     // 防止鬼魂卡住的安全措施
     if (pos.y < 0) return {"y": 0, "x": pos.x};
     if (pos.y > 220) return {"y": 220, "x": pos.x};
-    
-    return false;
+
+        return false;
   }
   
-  getChaseDirection() {
+  getSmartChaseDirection() {
+    if (!window.CHASE_MODE || this.isVunerable()) {
+      return this.getRandomDirection();
+    }
+    
     const pacmanPos = this.getUserPosition();
-    console.log("PACMAN position:", pacmanPos);
-    const dx = pacmanPos.x - this.position.x;
-    const dy = pacmanPos.y - this.position.y;
+    if (!pacmanPos) return this.getRandomDirection();
+    
+    // 計算曼哈頓距離 (用於評估到 Pacman 的距離)
+    const manhattanDistance = (pos1, pos2) => {
+      return Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
+    };
+    
+    // 使用全局變量 HUNTING_PROBABILITY，並與鬼魂自身的個性結合
+    const combinedProb = window.HUNTING_PROBABILITY * this.personality.huntingProb;
+    
+    // 隨機決定是否追逐 Pacman
+    if (Math.random() > combinedProb) {
+      return this.getRandomDirection();
+    }
+    
+    // 獲取可能的移動方向
     const possibleDirs = [];
-    // 優先考慮距離較大的軸
+    const thisPos = this.position;
+    
+    // 計算到 Pacman 的向量
+    let targetPos = { x: pacmanPos.x, y: pacmanPos.y };
+    
+    // 團隊協作：如果啟用，根據 ID 和偏移量修改目標位置
+    if (window.GHOST_TEAMWORK) {
+      // 為每個鬼魂添加固定偏移，以便從不同方向接近 Pacman
+      targetPos.x += this.positionBias.x;
+      targetPos.y += this.positionBias.y;
+      
+      // 檢查鬼魂 ID，決定不同的策略
+      const idNum = parseInt(this.id.split('-')[1]);
+      
+      // 奇數 ID 的鬼魂嘗試預測 Pacman 移動
+      if (idNum % 2 === 1) {
+        // 预测 Pacman 根据当前方向将要移动的位置
+        const userDirection = window.pacmanCurrentDirection || LEFT; // 默认值
+        const predictionDistance = 30; // 预测距离
+        
+        if (userDirection === LEFT) {
+          targetPos.x -= predictionDistance;
+        } else if (userDirection === RIGHT) {
+          targetPos.x += predictionDistance;
+        } else if (userDirection === UP) {
+          targetPos.y -= predictionDistance;
+        } else if (userDirection === DOWN) {
+          targetPos.y += predictionDistance;
+        }
+      }
+    }
+    
+    // 計算主要的追逐方向（水平或垂直）
+    const dx = targetPos.x - thisPos.x;
+    const dy = targetPos.y - thisPos.y;
+    
+    // 根據距離確定優先方向
     if (Math.abs(dx) > Math.abs(dy)) {
+      // 水平距離更大，優先考慮水平移動
       if (dx > 0) possibleDirs.push(RIGHT);
       else if (dx < 0) possibleDirs.push(LEFT);
+      
       if (dy > 0) possibleDirs.push(DOWN);
       else if (dy < 0) possibleDirs.push(UP);
     } else {
+      // 垂直距離更大，優先考慮垂直移動
       if (dy > 0) possibleDirs.push(DOWN);
       else if (dy < 0) possibleDirs.push(UP);
+      
       if (dx > 0) possibleDirs.push(RIGHT);
       else if (dx < 0) possibleDirs.push(LEFT);
     }
-    // 檢查這些方向是否可行
-    for (let i = 0; i < possibleDirs.length; i++) {
-      const dir = possibleDirs[i];
+    
+    // 嘗試避免選擇與當前方向相反的方向，除非沒有其他選擇
+    const oppositeDir = this.oppositeDirection(this.direction);
+    const nonOppositeDirections = possibleDirs.filter(dir => dir !== oppositeDir);
+    
+    // 首先檢查非相反方向是否可行
+    if (nonOppositeDirections.length > 0) {
+      for (let dir of nonOppositeDirections) {
+        const npos = this.getNewCoord(dir, this.position);
+        if (this.map.isFloorSpace({
+          "y": this.pointToCoord(this.nextSquare(npos.y, dir)),
+          "x": this.pointToCoord(this.nextSquare(npos.x, dir))
+        })) {
+          return dir;
+        }
+      }
+    }
+    
+    // 如果非相反方向都不可行，檢查所有可能方向
+    for (let dir of possibleDirs) {
       const npos = this.getNewCoord(dir, this.position);
       if (this.map.isFloorSpace({
         "y": this.pointToCoord(this.nextSquare(npos.y, dir)),
@@ -262,8 +361,80 @@ class Ghost {
         return dir;
       }
     }
-    // 如果都不行，隨機選一個
+    
+    // 如果所有方向都不行，隨機選一個
     return this.getRandomDirection();
+  }
+  
+  // 添加一個方法處理逃避行為
+  getFleeDirection() {
+    const pacmanPos = this.getUserPosition();
+    if (!pacmanPos) return this.getRandomDirection();
+    
+    // 獲取所有可能的移動方向
+    const possibleDirs = [LEFT, RIGHT, UP, DOWN];
+    
+    // 計算每個方向會導致的新位置
+    const newPositions = possibleDirs.map(dir => {
+      const npos = this.getNewCoord(dir, this.position);
+      return {
+        dir: dir,
+        pos: npos,
+        valid: this.map.isFloorSpace({
+          "y": this.pointToCoord(this.nextSquare(npos.y, dir)),
+          "x": this.pointToCoord(this.nextSquare(npos.x, dir))
+        })
+      };
+    }).filter(item => item.valid);
+    
+    // 如果沒有有效方向，返回隨機方向
+    if (newPositions.length === 0) {
+      return this.getRandomDirection();
+    }
+    
+    // 計算每個方向與 Pacman 的距離
+    newPositions.forEach(item => {
+      item.distance = Math.sqrt(
+        Math.pow(item.pos.x - pacmanPos.x, 2) + 
+        Math.pow(item.pos.y - pacmanPos.y, 2)
+      );
+    });
+    
+    // 排序，優先選擇遠離 Pacman 的方向
+    newPositions.sort((a, b) => b.distance - a.distance);
+    
+    // 隨機選擇前兩個最遠的方向之一，增加一些隨機性
+    const validDirections = newPositions.slice(0, Math.min(2, newPositions.length));
+    return validDirections[Math.floor(Math.random() * validDirections.length)].dir;
+  }
+  
+  // 檢測鬼魂是否被卡住
+  isStuck() {
+    if (this.lastPositions.length < 8) return false;
+    
+    // 檢查最近8個位置是否只有2個不同位置
+    const uniquePositions = new Set();
+    this.lastPositions.forEach(pos => {
+      uniquePositions.add(`${pos.x},${pos.y}`);
+    });
+    
+    return uniquePositions.size <= 2;
+  }
+  
+  // 處理被卡住的情況
+  handleStuckState() {
+    // 增加隨機性，幫助擺脫困境
+    const randomDirection = [LEFT, RIGHT, UP, DOWN][Math.floor(Math.random() * 4)];
+    this.stuckCount++; // 增加卡住計數
+    
+    // 如果卡住超過5次，嘗試更加隨機的行為
+    if (this.stuckCount > 5) {
+      this.stuckCount = 0;
+      this.lastPositions = [];
+      return randomDirection;
+    }
+    
+    return randomDirection;
   }
   
   move(ctx) {
@@ -273,14 +444,32 @@ class Ghost {
     let moveAttempts = 0;
     const MAX_ATTEMPTS = 5; // 限制尝试次数
     
+    // 更新位置歷史
+    this.lastPositions.push({x: oldPos.x, y: oldPos.y});
+    if (this.lastPositions.length > 10) {
+      this.lastPositions.shift(); // 保持陣列在合理大小
+    }
+    
+    // 檢查是否被卡住
+    if (this.isStuck()) {
+      this.due = this.handleStuckState();
+    } else {
+      this.stuckCount = 0; // 重置卡住計數
+    }
+    
     // 移动逻辑主循环，替代原来的递归
     while (moveAttempts < MAX_ATTEMPTS) {
       moveAttempts++;
       
-      // 根据 flag 決定移動策略
-      if (CHASE_MODE) {
-        this.due = this.getChaseDirection();
+      // 根據狀態決定移動策略
+      if (this.isVunerable()) {
+        // 如果可食用，嘗試逃離 Pacman
+        this.due = this.getFleeDirection();
+      } else if (window.CHASE_MODE) {
+        // 智能追逐模式
+        this.due = this.getSmartChaseDirection();
       } else {
+        // 隨機移動模式
         this.due = this.getRandomDirection();
       }
       
@@ -321,14 +510,12 @@ class Ghost {
     // 更新位置
     this.position = npos;
     const tmp = this.pane(this.position);
-    if (tmp) {
+    if (tmp) { 
       this.position = tmp;
     }
     
-    // 不在 chase 模式时随机更新下一步方向
-    if (!CHASE_MODE) {
-      this.due = this.getRandomDirection();
-    }
+    // 記錄最近一次決策點
+    this.lastDecisionPoint = this.game.getTick();
     
     return {
       "new": this.position,
@@ -403,41 +590,41 @@ class User {
   keyDown(e) {
     if (typeof this.keyMap[e.keyCode] !== "undefined") { 
       this.due = this.keyMap[e.keyCode];
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    }
-    return true;
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        }
+        return true;
   }
 
   getNewCoord(dir, current) {
-    return {
-      "x": current.x + (dir === LEFT && -2 || dir === RIGHT && 2 || 0),
-      "y": current.y + (dir === DOWN && 2 || dir === UP    && -2 || 0)
-    };
+        return {
+            "x": current.x + (dir === LEFT && -2 || dir === RIGHT && 2 || 0),
+            "y": current.y + (dir === DOWN && 2 || dir === UP    && -2 || 0)
+        };
   }
 
   onWholeSquare(x) {
-    return x % 10 === 0;
+        return x % 10 === 0;
   }
 
   pointToCoord(x) {
-    return Math.round(x/10);
+        return Math.round(x/10);
   }
-  
+    
   nextSquare(x, dir) {
-    var rem = x % 10;
-    if (rem === 0) { 
-      return x; 
-    } else if (dir === RIGHT || dir === DOWN) { 
-      return x + (10 - rem);
-    } else {
-      return x - rem;
-    }
+        var rem = x % 10;
+        if (rem === 0) { 
+            return x; 
+        } else if (dir === RIGHT || dir === DOWN) { 
+            return x + (10 - rem);
+        } else {
+            return x - rem;
+        }
   }
 
   next(pos, dir) {
-    return {
+        return {
       "y" : this.pointToCoord(this.nextSquare(pos.y, dir)),
       "x" : this.pointToCoord(this.nextSquare(pos.x, dir)),
     };                               
@@ -448,10 +635,10 @@ class User {
   }
 
   isOnSamePlane(due, dir) { 
-    return ((due === LEFT || due === RIGHT) && 
-            (dir === LEFT || dir === RIGHT)) || 
-        ((due === UP || due === DOWN) && 
-         (dir === UP || dir === DOWN));
+        return ((due === LEFT || due === RIGHT) && 
+                (dir === LEFT || dir === RIGHT)) || 
+            ((due === UP || due === DOWN) && 
+             (dir === UP || dir === DOWN));
   }
 
   move(ctx) {
@@ -467,12 +654,12 @@ class User {
           (this.onGridSquare(this.position) && 
            this.map.isFloorSpace(this.next(npos, this.due)))) {
         this.direction = this.due;
-      } else {
-        npos = null;
-      }
-    }
+            } else {
+                npos = null;
+            }
+        }
 
-    if (npos === null) {
+        if (npos === null) {
       npos = this.getNewCoord(this.direction, this.position);
     }
     
@@ -483,6 +670,9 @@ class User {
     if (this.direction === NONE) {
       return {"new" : this.position, "old" : this.position};
     }
+    
+    // 紀錄當前 Pacman 的移動方向到全局變量，供鬼魂使用
+    window.pacmanCurrentDirection = this.direction;
     
     // 针对两个地图位置更新传送点逻辑
     // MAP1 的传送点在 y = 100，MAP2 的传送点也应该适用
@@ -526,77 +716,77 @@ class User {
         }
         
         // 根據豆子類型觸發不同效果
-        if (block === Pacman.PILL) { 
+            if (block === Pacman.PILL) { 
           this.game.eatenPill();
         } else if (block === Pacman.RED_PILL) {
           this.game.eatenRedPill();
         } else if (block === Pacman.BLUE_PILL) {
           this.game.eatenBluePill();
         }
-      }
-    }   
-            
-    return {
+            }
+        }   
+                
+        return {
       "new" : this.position,
-      "old" : oldPosition
-    };
+            "old" : oldPosition
+        };
   }
 
   isMidSquare(x) { 
-    var rem = x % 10;
-    return rem > 3 || rem < 7;
+        var rem = x % 10;
+        return rem > 3 || rem < 7;
   }
 
   calcAngle(dir, pos) { 
-    if (dir == RIGHT && (pos.x % 10 < 5)) {
-      return {"start":0.25, "end":1.75, "direction": false};
-    } else if (dir === DOWN && (pos.y % 10 < 5)) { 
-      return {"start":0.75, "end":2.25, "direction": false};
-    } else if (dir === UP && (pos.y % 10 < 5)) { 
-      return {"start":1.25, "end":1.75, "direction": true};
-    } else if (dir === LEFT && (pos.x % 10 < 5)) {             
-      return {"start":0.75, "end":1.25, "direction": true};
-    }
-    return {"start":0, "end":2, "direction": false};
+        if (dir == RIGHT && (pos.x % 10 < 5)) {
+            return {"start":0.25, "end":1.75, "direction": false};
+        } else if (dir === DOWN && (pos.y % 10 < 5)) { 
+            return {"start":0.75, "end":2.25, "direction": false};
+        } else if (dir === UP && (pos.y % 10 < 5)) { 
+            return {"start":1.25, "end":1.75, "direction": true};
+        } else if (dir === LEFT && (pos.x % 10 < 5)) {             
+            return {"start":0.75, "end":1.25, "direction": true};
+        }
+        return {"start":0, "end":2, "direction": false};
   }
 
   drawDead(ctx, amount) { 
     var size = this.map.blockSize, 
-        half = size / 2;
+            half = size / 2;
 
-    if (amount >= 1) { 
-      return;
-    }
+        if (amount >= 1) { 
+            return;
+        }
 
-    ctx.fillStyle = "#FFFF00";
-    ctx.beginPath();        
+        ctx.fillStyle = "#FFFF00";
+        ctx.beginPath();        
     ctx.moveTo(((this.position.x/10) * size) + half, 
                ((this.position.y/10) * size) + half);
-    
+        
     ctx.arc(((this.position.x/10) * size) + half, 
             ((this.position.y/10) * size) + half,
-            half, 0, Math.PI * 2 * amount, true); 
-    
-    ctx.fill();    
+                half, 0, Math.PI * 2 * amount, true); 
+        
+        ctx.fill();    
   }
 
   draw(ctx) { 
     var s = this.map.blockSize, 
         angle = this.calcAngle(this.direction, this.position);
 
-    ctx.fillStyle = "#FFFF00";
+        ctx.fillStyle = "#FFFF00";
 
-    ctx.beginPath();        
+        ctx.beginPath();        
 
     ctx.moveTo(((this.position.x/10) * s) + s / 2,
                ((this.position.y/10) * s) + s / 2);
-    
+        
     ctx.arc(((this.position.x/10) * s) + s / 2,
             ((this.position.y/10) * s) + s / 2,
-            s / 2, Math.PI * angle.start, 
-            Math.PI * angle.end, angle.direction); 
-    
-    ctx.fill();    
+                s / 2, Math.PI * angle.start, 
+                Math.PI * angle.end, angle.direction); 
+        
+        ctx.fill();    
   }
   
   getPosition() {
@@ -629,8 +819,8 @@ class Map {
   
   isFloorSpace(pos) {
     if (!this.withinBounds(pos.y, pos.x)) {
-      return false;
-    }
+            return false;
+        }
     const piece = this.map[pos.y][pos.x];
     return piece === Pacman.EMPTY || 
       piece === Pacman.BISCUIT ||
@@ -641,8 +831,8 @@ class Map {
   
   drawWall(ctx) {
     let i, j, p, line;
-    
-    ctx.strokeStyle = "#0000FF";
+        
+        ctx.strokeStyle = "#0000FF";
     ctx.lineWidth = 5;
     ctx.lineCap = "round";
     
@@ -660,26 +850,26 @@ class Map {
     
     for (i = 0; i < walls.length; i += 1) {
       line = walls[i];
-      ctx.beginPath();
+            ctx.beginPath();
 
-      for (j = 0; j < line.length; j += 1) {
-        p = line[j];
-        
-        if (p.move) {
+            for (j = 0; j < line.length; j += 1) {
+                p = line[j];
+                
+                if (p.move) {
           ctx.moveTo(p.move[0] * this.blockSize, p.move[1] * this.blockSize);
-        } else if (p.line) {
+                } else if (p.line) {
           ctx.lineTo(p.line[0] * this.blockSize, p.line[1] * this.blockSize);
-        } else if (p.curve) {
+                } else if (p.curve) {
           ctx.quadraticCurveTo(p.curve[0] * this.blockSize, 
                               p.curve[1] * this.blockSize,
                               p.curve[2] * this.blockSize, 
                               p.curve[3] * this.blockSize);   
+                }
+            }
+            ctx.stroke();
         }
-      }
-      ctx.stroke();
     }
-  }
-  
+    
   reset() {       
     // 根据当前地图级别选择正确的地图数据
     if (this.level === 1) {
@@ -744,7 +934,7 @@ class Map {
           ctx.fillStyle = "#000";
           ctx.fillRect((j * this.blockSize), (i * this.blockSize), 
                        this.blockSize, this.blockSize);
-          ctx.fillStyle = "#FFF";
+                    ctx.fillStyle = "#FFF";
           ctx.arc((j * this.blockSize) + this.blockSize / 2,
                   (i * this.blockSize) + this.blockSize / 2,
                   Math.abs(5 - (this.pillSize/3)), 
@@ -774,20 +964,20 @@ class Map {
           ctx.arc((j * this.blockSize) + this.blockSize / 2,
                   (i * this.blockSize) + this.blockSize / 2,
                   Math.abs(5 - (this.pillSize/3)), 
-                  0, 
-                  Math.PI * 2, false); 
-          ctx.fill();
-          ctx.closePath();
-        }
-      }
-    }
+                            0, 
+                            Math.PI * 2, false); 
+                    ctx.fill();
+                    ctx.closePath();
+                }
+		    }
+	    }
   }
   
   draw(ctx) {
     let i, j;
     const size = this.blockSize;
 
-    ctx.fillStyle = "#000";
+        ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.width * size, this.height * size);
 
     this.drawWall(ctx);
@@ -803,26 +993,26 @@ class Map {
     const layout = this.map[y][x];
 
     if (layout === Pacman.PILL || layout === Pacman.RED_PILL || layout === Pacman.BLUE_PILL) {
-      return;
-    }
+            return;
+        }
 
-    ctx.beginPath();
-    
-    if (layout === Pacman.EMPTY || layout === Pacman.BLOCK || 
-        layout === Pacman.BISCUIT) {
-      
-      ctx.fillStyle = "#000";
+        ctx.beginPath();
+        
+        if (layout === Pacman.EMPTY || layout === Pacman.BLOCK || 
+            layout === Pacman.BISCUIT) {
+            
+            ctx.fillStyle = "#000";
       ctx.fillRect((x * this.blockSize), (y * this.blockSize), 
                    this.blockSize, this.blockSize);
 
-      if (layout === Pacman.BISCUIT) {
-        ctx.fillStyle = "#FFF";
+            if (layout === Pacman.BISCUIT) {
+                ctx.fillStyle = "#FFF";
         ctx.fillRect((x * this.blockSize) + (this.blockSize / 2.5), 
                      (y * this.blockSize) + (this.blockSize / 2.5), 
                      this.blockSize / 6, this.blockSize / 6);
-      }
-    }
-    ctx.closePath();	 
+	        }
+        }
+        ctx.closePath();	 
   }
 }
 
@@ -1048,12 +1238,26 @@ var PACMAN = (function () {
             console.log(result);
             dialog(result);
             map.draw(ctx);
+        } else if (e.keyCode === KEY.C) {
+            // 切換鬼魂追逐模式
+            window.CHASE_MODE = !window.CHASE_MODE;
+            const mode = window.CHASE_MODE ? "智能追逐" : "隨機移動";
+            console.log(`鬼魂模式已切換為: ${mode}`);
+            
+            // 調用 HTML 頁面的更新函數以立即更新顯示
+            if (typeof window.updateGhostModeDisplay === 'function') {
+                window.updateGhostModeDisplay();
+            }
         } else if (e.keyCode === KEY.G) {
-            // 按 G 键更新当前关卡的墙壁定义
-            const result = updateWallsFromMap(map.level);
-            console.log(result);
-            alert(result);
-            map.draw(ctx);
+            // 切換鬼魂團隊合作模式
+            window.GHOST_TEAMWORK = !window.GHOST_TEAMWORK;
+            const status = window.GHOST_TEAMWORK ? "啟用" : "禁用";
+            console.log(`鬼魂團隊合作已${status}`);
+            
+            // 調用 HTML 頁面的更新函數以立即更新顯示
+            if (typeof window.updateTeamworkDisplay === 'function') {
+                window.updateTeamworkDisplay();
+            }
         } else if (e.keyCode === KEY.T) {
             // 按 T 键测试墙壁生成逻辑
             const result = testWallGeneration();
@@ -1267,7 +1471,7 @@ var PACMAN = (function () {
     function getUserPosition() {
         return user.getPosition();
     }
-
+    
     function init(wrapper, root) {
         
         var i, len, ghost,
@@ -1290,14 +1494,31 @@ var PACMAN = (function () {
             "eatenBluePill"  : function() { return PACMAN.eatenBluePill(); }
         }, map);
 
-        for (i = 0, len = ghostSpecs.length; i < len; i += 1) {
+        // 鬼魂特性設置
+        const ghostTraits = [
+            { color: "#00FFDE", id: "ghost-1", hunting: 0.75, teamwork: true, desc: "追蹤者" }, // 高追蹤，善於追逐
+            { color: "#FF0000", id: "ghost-2", hunting: 0.55, teamwork: true, desc: "預測者" }, // 中等追蹤，善於預測
+            { color: "#FFB8DE", id: "ghost-3", hunting: 0.65, teamwork: false, desc: "遊蕩者" } // 中等追蹤，獨立行動
+        ];
+
+        // 初始化鬼魂，每個具有不同特性
+        for (i = 0, len = ghostTraits.length; i < len; i += 1) {
+            const trait = ghostTraits[i];
             ghost = new Ghost(
                 {"getTick":getTick}, 
                 map, 
-                ghostSpecs[i], 
+                trait.color,
                 getUserPosition,
-                `ghost-${i+1}`
+                trait.id
             );
+            
+            // 設置個性化特性
+            ghost.personality.huntingProb = trait.hunting;
+            ghost.teamUse = trait.teamwork;
+            
+            // 添加描述到控制台
+            console.log(`初始化鬼魂 ${i+1}：${trait.desc}，追蹤率: ${trait.hunting}`);
+            
             ghosts.push(ghost);
         }
         
@@ -1330,7 +1551,7 @@ var PACMAN = (function () {
         
     function loaded() {
         dialog("按 N 鍵開始新遊戲\n按↑↓←→控制移動\n按 H 鍵查看全部功能");
-        
+
         // 在控制台显示帮助信息，提醒用户可用的功能按键
         console.log("遊戲已加載完成，按 H 鍵可以查看功能按鍵幫助");
         
@@ -1502,7 +1723,7 @@ var PACMAN = (function () {
 }());
 
 /* Human readable keyCode index */
-var KEY = {'BACKSPACE': 8, 'TAB': 9, 'NUM_PAD_CLEAR': 12, 'ENTER': 13, 'SHIFT': 16, 'CTRL': 17, 'ALT': 18, 'PAUSE': 19, 'CAPS_LOCK': 20, 'ESCAPE': 27, 'SPACEBAR': 32, 'PAGE_UP': 33, 'PAGE_DOWN': 34, 'END': 35, 'HOME': 36, 'ARROW_LEFT': 37, 'ARROW_UP': 38, 'ARROW_RIGHT': 39, 'ARROW_DOWN': 40, 'PRINT_SCREEN': 44, 'INSERT': 45, 'DELETE': 46, 'SEMICOLON': 59, 'WINDOWS_LEFT': 91, 'WINDOWS_RIGHT': 92, 'SELECT': 93, 'NUM_PAD_ASTERISK': 106, 'NUM_PAD_PLUS_SIGN': 107, 'NUM_PAD_HYPHEN-MINUS': 109, 'NUM_PAD_FULL_STOP': 110, 'NUM_PAD_SOLIDUS': 111, 'NUM_LOCK': 144, 'SCROLL_LOCK': 145, 'SEMICOLON': 186, 'EQUALS_SIGN': 187, 'COMMA': 188, 'HYPHEN-MINUS': 189, 'FULL_STOP': 190, 'SOLIDUS': 191, 'GRAVE_ACCENT': 192, 'LEFT_SQUARE_BRACKET': 219, 'REVERSE_SOLIDUS': 220, 'RIGHT_SQUARE_BRACKET': 221, 'APOSTROPHE': 222, 'M': 77, 'G': 71, 'T': 84, 'D': 68, 'H': 72, 'A': 65};
+var KEY = {'BACKSPACE': 8, 'TAB': 9, 'NUM_PAD_CLEAR': 12, 'ENTER': 13, 'SHIFT': 16, 'CTRL': 17, 'ALT': 18, 'PAUSE': 19, 'CAPS_LOCK': 20, 'ESCAPE': 27, 'SPACEBAR': 32, 'PAGE_UP': 33, 'PAGE_DOWN': 34, 'END': 35, 'HOME': 36, 'ARROW_LEFT': 37, 'ARROW_UP': 38, 'ARROW_RIGHT': 39, 'ARROW_DOWN': 40, 'PRINT_SCREEN': 44, 'INSERT': 45, 'DELETE': 46, 'SEMICOLON': 59, 'WINDOWS_LEFT': 91, 'WINDOWS_RIGHT': 92, 'SELECT': 93, 'NUM_PAD_ASTERISK': 106, 'NUM_PAD_PLUS_SIGN': 107, 'NUM_PAD_HYPHEN-MINUS': 109, 'NUM_PAD_FULL_STOP': 110, 'NUM_PAD_SOLIDUS': 111, 'NUM_LOCK': 144, 'SCROLL_LOCK': 145, 'SEMICOLON': 186, 'EQUALS_SIGN': 187, 'COMMA': 188, 'HYPHEN-MINUS': 189, 'FULL_STOP': 190, 'SOLIDUS': 191, 'GRAVE_ACCENT': 192, 'LEFT_SQUARE_BRACKET': 219, 'REVERSE_SOLIDUS': 220, 'RIGHT_SQUARE_BRACKET': 221, 'APOSTROPHE': 222, 'M': 77, 'G': 71, 'T': 84, 'D': 68, 'H': 72, 'A': 65, 'C': 67};
 
 (function () {
 	/* 0 - 9 */
@@ -1958,6 +2179,7 @@ function showHelp() {
   console.log("T 键 - 测试墙壁生成逻辑");
   console.log("D 键 - 显示游戏调试信息");
   console.log("H 键 - 显示/隐藏此帮助");
+  console.log("C 键 - 切换鬼魂模式 (智能追逐/随机移动)");
   console.groupEnd();
   
   // 在游戏界面显示简短帮助信息
@@ -2039,6 +2261,7 @@ function showHelp() {
       {key: "M", desc: "切换地图 (在四个地图之间循环)"},
       {key: "A", desc: "显示所有地图预览"},
       {key: "S", desc: "开启/关闭音效"},
+      {key: "C", desc: "切换鬼魂模式 (智能追逐/随机移动)"},
       {key: "G", desc: "更新当前地图的墙壁"},
       {key: "T", desc: "测试墙壁生成逻辑"},
       {key: "D", desc: "显示游戏调试信息"},
@@ -2092,7 +2315,7 @@ function showHelp() {
     setTimeout(function() {
       helpPanel.style.opacity = '1';
     }, 10);
-  } else {
+        } else {
     // 如果帮助面板已存在，则使其淡出后移除
     helpPanel.style.opacity = '0';
     setTimeout(function() {

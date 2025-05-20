@@ -22,8 +22,210 @@
         visibility:hidden
       }
       h1 { font-family: BDCartoonShoutRegular; text-align:center; }
-      body { width:342px; margin:0px auto; font-family:sans-serif; }
+      body { 
+        width: 700px; /* 增加寬度以容納並排顯示的內容 */
+        margin: 0px auto; 
+        font-family: sans-serif;
+      }
       a { text-decoration:none; }
+      
+      /* 新增佈局樣式 */
+      .content-container {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 16px; /* 增加兩側間距 */
+        margin-top: 20px;
+      }
+      
+      .game-container {
+        flex: 0 0 auto;
+      }
+      
+      .controls-container {
+        flex: 0 0 auto;
+      }
+      
+      /* 遊戲說明區域樣式 */
+      .game-instructions {
+        margin-bottom: 20px;
+        background-color: #000;
+        border: 2px solid #0000FF;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 0 10px rgba(0, 0, 255, 0.5);
+      }
+      
+      .instructions-title {
+        font-weight: bold;
+        margin-bottom: 15px;
+        font-size: 16px;
+        color: #FFFF00;
+        text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+        border-bottom: 1px solid #0000FF;
+        padding-bottom: 8px;
+        text-align: center;
+      }
+      
+      .game-instructions h5 {
+        color: #FFFF00;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+      
+      /* 鬼魂模式控制樣式 */
+      .game-controls {
+        width: 342px; /* 與遊戲區域寬度一致 */
+        padding: 15px;
+        border: 2px solid #0000FF;
+        border-radius: 10px;
+        background-color: #000;
+        color: #FFFF00;
+        text-align: center;
+        margin-bottom: 20px;
+        box-shadow: 0 0 10px rgba(0, 0, 255, 0.5);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 152px; /* 與遊戲說明區域高度一致 */
+      }
+      
+      .control-title {
+        font-weight: bold;
+        margin-bottom: 16px;
+        font-size: 16px;
+        text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+        border-bottom: 1px solid #0000FF;
+        padding-bottom: 8px;
+      }
+      
+      /* 並排控制按鈕樣式 */
+      .buttons-row {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+      
+      .button-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .toggle-button {
+        background-color: #0000FF;
+        color: white;
+        border: none;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s;
+        width: 120px;
+        font-size: 13px;
+      }
+      
+      .toggle-button:hover {
+        background-color: #0000AA;
+      }
+      
+      .mode-display {
+        font-weight: bold;
+        font-size: 11px;
+      }
+      
+      .mode-smart {
+        color: #FF0000;
+      }
+      
+      .mode-random {
+        color: #00FF00;
+      }
+      
+      .control-row {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .slider-label {
+        font-weight: bold;
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+      }
+      
+      .slider-container {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        justify-content: center;
+        gap: 10px;
+      }
+      
+      .range-slider {
+        width: 200px;
+        -webkit-appearance: none;
+        height: 8px;
+        border-radius: 4px;
+        background: #333;
+        outline: none;
+      }
+      
+      .range-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #0000FF;
+        cursor: pointer;
+        border: 2px solid #FFFF00;
+        box-shadow: 0 0 5px rgba(0, 0, 255, 0.8);
+      }
+      
+      .range-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #0000FF;
+        cursor: pointer;
+        border: 2px solid #FFFF00;
+        box-shadow: 0 0 5px rgba(0, 0, 255, 0.8);
+      }
+      
+      #hunting-probability-value {
+        font-weight: bold;
+        color: #FFFF00;
+        width: 40px;
+        text-align: left;
+      }
+      
+      .preset-buttons {
+        margin-top: 10px;
+      }
+      
+      .preset-button {
+        background-color: #0000FF;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        margin: 3px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.2s;
+        box-shadow: 0 0 5px rgba(0, 0, 255, 0.5);
+        font-size: 12px;
+      }
+      
+      .preset-button:hover {
+        background-color: #0000AA;
+        transform: scale(1.05);
+      }
     </style>
 
 </head>
@@ -34,17 +236,61 @@
 
   <h1>HTML5 Pacman</h1>
 
-  <h5> 方向鍵 ↑↓←→ - 控制 Pacman 移動 </h5>
-  <h5> N 鍵 - 開始新遊戲 , P 鍵 - 暫停/繼續遊戲 </h5>
-  <h5> M 鍵 - 切換地圖 , A 鍵 - 開啟/關閉地圖預覽 </h5>
-  <h5> S 鍵 - 開啟/關閉音效</h5>
+  <div class="content-container">
+    <!-- 左側：遊戲區域和遊戲說明 -->
+    <div class="game-container">
+      <!-- 遊戲說明 -->
+      <div class="game-instructions">
+        <div class="instructions-title">遊戲說明</div>
+        <h5> 方向鍵 ↑↓←→ - 控制 Pacman 移動 </h5>
+        <h5> N 鍵 - 開始新遊戲 , P 鍵 - 暫停/繼續遊戲 </h5>
+        <h5> M 鍵 - 切換地圖 , A 鍵 - 開啟/關閉地圖預覽 </h5>
+        <h5> S 鍵 - 開啟/關閉音效 , C 鍵 - 切換鬼魂追逐模式 </h5>
+        <h5> G 鍵 - 切換鬼魂團隊合作 </h5>
+      </div>
+    
+      <!-- 遊戲畫面 -->
+      <div id="pacman"></div>
+    </div>
+    
+    <!-- 右側：控制面板 -->
+    <div class="controls-container">
+      <!-- 鬼魂模式控制 -->
+      <div class="game-controls">
+        <div class="control-title">鬼魂行為控制面板</div>
+        
+        <!-- 將兩個按鈕並排放在一起 -->
+        <div class="buttons-row">
+          <div class="button-group">
+            <button id="ghost-mode-toggle" class="toggle-button" onclick="toggleGhostMode()">切換追逐模式</button>
+            <div class="mode-display">
+              模式: <span id="ghost-mode-display" class="mode-smart">智能追逐</span>
+            </div>
+          </div>
+          
+          <div class="button-group">
+            <button id="teamwork-toggle" class="toggle-button" onclick="toggleGhostTeamwork()">切換團隊合作</button>
+            <div class="mode-display">
+              團隊: <span id="teamwork-display" class="mode-smart">啟用</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="control-row">
+          <label for="hunting-probability" class="slider-label">追逐積極度：</label>
+          <div class="slider-container">
+            <input type="range" id="hunting-probability" min="0" max="100" value="75" class="range-slider" oninput="updateHuntingProbability(this.value)">
+            <span id="hunting-probability-value">75%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  <div id="pacman"></div>
   <script src="pacman.js"></script>
   <script src="modernizr-1.5.min.js"></script>
 
   <script>
-
     var el = document.getElementById("pacman");
 
     if (Modernizr.canvas && Modernizr.localstorage && 
@@ -54,6 +300,98 @@
       el.innerHTML = "Sorry, needs a decent browser<br /><small>" + 
         "(firefox 3.6+, Chrome 4+, Opera 10+ and Safari 4+)</small>";
     }
+    
+    // 切換鬼魂模式的功能
+    function toggleGhostMode() {
+      // 檢查 PACMAN 是否已初始化
+      if (typeof window.CHASE_MODE !== 'undefined') {
+        window.CHASE_MODE = !window.CHASE_MODE;
+        updateGhostModeDisplay();
+      }
+    }
+    
+    // 切換鬼魂團隊合作模式
+    function toggleGhostTeamwork() {
+      if (typeof window.GHOST_TEAMWORK !== 'undefined') {
+        window.GHOST_TEAMWORK = !window.GHOST_TEAMWORK;
+        updateTeamworkDisplay();
+      }
+    }
+    
+    // 更新追逐概率
+    function updateHuntingProbability(value) {
+      if (typeof window.HUNTING_PROBABILITY !== 'undefined') {
+        window.HUNTING_PROBABILITY = value / 100;
+        document.getElementById('hunting-probability-value').textContent = value + '%';
+      }
+    }
+    
+    // 設置預設的追逐概率
+    function setHuntingPreset(value) {
+      if (typeof window.HUNTING_PROBABILITY !== 'undefined') {
+        const slider = document.getElementById('hunting-probability');
+        slider.value = value;
+        updateHuntingProbability(value);
+      }
+    }
+    
+    // 更新鬼魂模式顯示
+    function updateGhostModeDisplay() {
+      var modeDisplay = document.getElementById('ghost-mode-display');
+      if (window.CHASE_MODE) {
+        modeDisplay.textContent = '智能追逐';
+        modeDisplay.className = 'mode-smart';
+      } else {
+        modeDisplay.textContent = '隨機移動';
+        modeDisplay.className = 'mode-random';
+      }
+    }
+    
+    // 更新團隊合作顯示
+    function updateTeamworkDisplay() {
+      var display = document.getElementById('teamwork-display');
+      if (window.GHOST_TEAMWORK) {
+        display.textContent = '啟用';
+        display.className = 'mode-smart';
+      } else {
+        display.textContent = '禁用';
+        display.className = 'mode-random';
+      }
+    }
+    
+    // 初始化界面
+    function initControls() {
+      if (typeof window.CHASE_MODE !== 'undefined') {
+        updateGhostModeDisplay();
+      }
+      
+      if (typeof window.GHOST_TEAMWORK !== 'undefined') {
+        updateTeamworkDisplay();
+      }
+      
+      if (typeof window.HUNTING_PROBABILITY !== 'undefined') {
+        var slider = document.getElementById('hunting-probability');
+        slider.value = window.HUNTING_PROBABILITY * 100;
+        document.getElementById('hunting-probability-value').textContent = Math.round(window.HUNTING_PROBABILITY * 100) + '%';
+      }
+    }
+    
+    // 定期檢查並更新所有控制
+    setInterval(function() {
+      if (typeof window.CHASE_MODE !== 'undefined') {
+        updateGhostModeDisplay();
+        updateTeamworkDisplay();
+        
+        var slider = document.getElementById('hunting-probability');
+        if (slider.value != Math.round(window.HUNTING_PROBABILITY * 100)) {
+          slider.value = window.HUNTING_PROBABILITY * 100;
+          document.getElementById('hunting-probability-value').textContent = Math.round(window.HUNTING_PROBABILITY * 100) + '%';
+        }
+      }
+    }, 1000);
+    
+    // 頁面加載後初始化
+    window.addEventListener('load', initControls);
   </script>
 
 </body>
