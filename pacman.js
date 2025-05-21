@@ -24,7 +24,7 @@ var NONE        = 4,
 // 將鬼魂模式相關變量設為全局變量，供 HTML 界面訪問
 window.CHASE_MODE = true; // 設為 true 則鬼魂會追蹤 Pacman，false 則隨機移動
 window.GHOST_TEAMWORK = true; // 設為 true 則啟用鬼魂團隊協作
-window.HUNTING_PROBABILITY = 0.65; // 鬼魂主動追逐 Pacman 的概率
+window.HUNTING_PROBABILITY = 0.95; // 鬼魂主動追逐 Pacman 的概率
 
 Pacman.FPS = 30;
 
@@ -61,6 +61,9 @@ class Ghost {
     this.lastDecisionPoint = 0; // 上次決策的遊戲刻
     this.stuckCount = 0; // 卡住計數
     this.lastPositions = []; // 記錄過去幾個位置，用於檢測卡住
+    
+    // 目標位置，用於導航到特定座標
+    this.targetPosition = null;
     
     this.reset();
   }
@@ -111,7 +114,8 @@ class Ghost {
   reset() {
     this.eaten = null;
     this.eatable = null;
-    this.position = {"x": 90, "y": 80};
+    // 恢復鬼魂初始位置到原始座標
+    this.position = {"x": 90, "y": 80};  // 恢復到原始位置
     this.direction = this.getRandomDirection();
     this.due = this.getRandomDirection();
   }
@@ -129,6 +133,8 @@ class Ghost {
   makeEatable() {
     this.direction = this.oppositeDirection(this.direction);
     this.eatable = this.game.getTick();
+    // 清除目標位置，避免在可食用狀態下仍然追逐 Pacman
+    this.targetPosition = null;
   }
 
   eat() { 
@@ -450,6 +456,96 @@ class Ghost {
       this.lastPositions.shift(); // 保持陣列在合理大小
     }
     
+    // 檢查與 Pacman 的距離，如果小於閾值則自動追逐
+    const pacmanPos = this.getUserPosition();
+    if (pacmanPos && !this.isVunerable() && window.CHASE_MODE) {
+      const distance = Math.sqrt(
+        Math.pow(this.position.x - pacmanPos.x, 2) + 
+        Math.pow(this.position.y - pacmanPos.y, 2)
+      );
+      
+      // 如果距離小於 6 個單位（60像素），則設置目標位置為 Pacman 的位置
+      if (distance < 30) {
+        this.targetPosition = { x: pacmanPos.x, y: pacmanPos.y };
+        if (distance < 30) {
+          // 距離非常近時，每幀更新目標位置以跟蹤 Pacman 的移動
+          console.log(`鬼魂 ${this.id} 發現 Pacman 非常近 (${Math.floor(distance)}), 正在追逐!`);
+          
+          // 每30幀（約1秒）顯示一次追逐通知，避免過於頻繁
+          if (this.game.getTick() % 30 === 0) {
+            // 使用全局函數顯示對話框通知
+            if (typeof dialog === 'function') {
+              // 獲取鬼魂 ID 的數字部分
+              const ghostId = this.id.split('-')[1];
+              dialog(`鬼魂 ${ghostId} 正在追逐你!`);
+            }
+          }
+        }
+      } else if (distance >= 30 && window.GHOST_TEAMWORK) {
+        // 距離超過 30 像素且啟用團隊合作模式時，分配最近的三個交叉路口給鬼魂
+        // 使用全局變量 ghosts 和 map
+        
+        // 每 90 幀（約 3 秒）檢查一次，避免過於頻繁地更改目標
+        if (this.game.getTick() % 90 === 0) {
+          // 獲取鬼魂 ID 的數字部分
+          const ghostId = parseInt(this.id.split('-')[1]);
+          
+          // 檢查是否有全局的 map 和 ghosts 變量
+          if (typeof map !== 'undefined' && typeof ghosts !== 'undefined') {
+            const intersections = map.getAllIntersections();
+            
+            if (intersections && intersections.length > 0) {
+              // 計算每個交叉路口到玩家的距離
+              const intersectionsWithDistance = intersections.map(intersection => {
+                const distance = Math.sqrt(
+                  Math.pow(pacmanPos.x - intersection.x, 2) + 
+                  Math.pow(pacmanPos.y - intersection.y, 2)
+                );
+                return { ...intersection, distance };
+              });
+              
+              // 按距離排序
+              intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+              
+              // 獲取最近的三個交叉路口
+              const nearestThree = intersectionsWithDistance.slice(0, 3);
+              
+              // 確保我們有足夠的鬼魂和交叉路口
+              const assignCount = Math.min(nearestThree.length, ghosts.length);
+              
+              if (assignCount > 0) {
+                // 根據鬼魂 ID 分配交叉路口（確保每個鬼魂分配到不同的交叉路口）
+                const intersectionIndex = (ghostId - 1) % assignCount;
+                const intersection = nearestThree[intersectionIndex];
+                
+                // 設置鬼魂的目標位置為交叉路口座標
+                this.targetPosition = { x: intersection.x, y: intersection.y };
+                
+                // 將遊戲座標轉換為地圖座標（除以10）
+                const mapX = Math.floor(intersection.x / 10);
+                const mapY = Math.floor(intersection.y / 10);
+                
+                console.log(`鬼魂 ${ghostId} (${this.id}) 前往交叉路口 ${intersectionIndex + 1}: (${mapX}, ${mapY}), 方向數: ${intersection.directions}`);
+                
+                // 每 300 幀（約 10 秒）顯示一次目標交叉路口通知
+                if (this.game.getTick() % 300 === 0) {
+                  if (typeof dialog === 'function') {
+                    dialog(`鬼魂 ${ghostId} 正在前往交叉路口!`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (!window.CHASE_MODE && this.targetPosition) {
+        // 如果處於隨機移動模式，並且有設定目標位置，則清除目標位置
+        if (this.game.getTick() % 60 === 0) {  // 每 2 秒檢查一次
+          console.log(`鬼魂 ${this.id} 處於隨機移動模式，清除目標位置`);
+          this.targetPosition = null;
+        }
+      }
+    }
+    
     // 檢查是否被卡住
     if (this.isStuck()) {
       this.due = this.handleStuckState();
@@ -465,6 +561,9 @@ class Ghost {
       if (this.isVunerable()) {
         // 如果可食用，嘗試逃離 Pacman
         this.due = this.getFleeDirection();
+      } else if (this.targetPosition) {
+        // 如果有目標位置，導航到該位置
+        this.due = this.moveToTarget();
       } else if (window.CHASE_MODE) {
         // 智能追逐模式
         this.due = this.getSmartChaseDirection();
@@ -521,6 +620,78 @@ class Ghost {
       "new": this.position,
       "old": oldPos
     };
+  }
+  
+  // 添加一個方法讓鬼魂移動到特定目標位置
+  moveToTarget() {
+    // 如果沒有目標位置，返回隨機方向
+    if (!this.targetPosition) {
+      return this.getRandomDirection();
+    }
+    
+    const thisPos = this.position;
+    
+    // 計算到目標位置的向量
+    const dx = this.targetPosition.x - thisPos.x;
+    const dy = this.targetPosition.y - thisPos.y;
+    
+    // 如果已經非常接近目標（誤差在5個單位內），則認為已到達
+    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+      console.log(`鬼魂 ${this.id} 已到達目標位置 (${Math.floor(this.targetPosition.x/10)}, ${Math.floor(this.targetPosition.y/10)})`);
+      this.targetPosition = null; // 清除目標位置
+      return this.getRandomDirection();
+    }
+    
+    // 獲取可能的移動方向
+    const possibleDirs = [];
+    
+    // 根據距離確定優先方向
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // 水平距離更大，優先考慮水平移動
+      if (dx > 0) possibleDirs.push(RIGHT);
+      else if (dx < 0) possibleDirs.push(LEFT);
+      
+      if (dy > 0) possibleDirs.push(DOWN);
+      else if (dy < 0) possibleDirs.push(UP);
+    } else {
+      // 垂直距離更大，優先考慮垂直移動
+      if (dy > 0) possibleDirs.push(DOWN);
+      else if (dy < 0) possibleDirs.push(UP);
+      
+      if (dx > 0) possibleDirs.push(RIGHT);
+      else if (dx < 0) possibleDirs.push(LEFT);
+    }
+    
+    // 嘗試避免選擇與當前方向相反的方向，除非沒有其他選擇
+    const oppositeDir = this.oppositeDirection(this.direction);
+    const nonOppositeDirections = possibleDirs.filter(dir => dir !== oppositeDir);
+    
+    // 首先檢查非相反方向是否可行
+    if (nonOppositeDirections.length > 0) {
+      for (let dir of nonOppositeDirections) {
+        const npos = this.getNewCoord(dir, this.position);
+        if (this.map.isFloorSpace({
+          "y": this.pointToCoord(this.nextSquare(npos.y, dir)),
+          "x": this.pointToCoord(this.nextSquare(npos.x, dir))
+        })) {
+          return dir;
+        }
+      }
+    }
+    
+    // 如果非相反方向都不可行，檢查所有可能方向
+    for (let dir of possibleDirs) {
+      const npos = this.getNewCoord(dir, this.position);
+      if (this.map.isFloorSpace({
+        "y": this.pointToCoord(this.nextSquare(npos.y, dir)),
+        "x": this.pointToCoord(this.nextSquare(npos.x, dir))
+      })) {
+        return dir;
+      }
+    }
+    
+    // 如果所有方向都不行，隨機選一個
+    return this.getRandomDirection();
   }
 }
 
@@ -897,9 +1068,87 @@ class Map {
         }
       }
     }
+    
+    // 分析並記錄所有交叉路口
+    this.intersections = this.findAllIntersections();
+    console.log(`地圖交叉路口數量: ${this.intersections.length}`);
+    
     // 更新全局变量以供地图预览使用
     window.pacmanMapLevel = this.level;
     console.log(`當前地圖(${this.level + 1})豆子總數: ${this.totalDots}`);
+  }
+
+  /**
+   * 分析地圖並找出所有的交叉路口
+   * 交叉路口定義為可以從至少三個不同方向移動的位置
+   * @returns {Array} 包含所有交叉路口座標的數組
+   */
+  findAllIntersections() {
+    const intersections = [];
+    
+    // 遍歷地圖中的每個位置
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        // 只檢查可行走的位置（非牆壁）
+        if (this.isFloorSpace({y, x})) {
+          // 計算從這個位置可以移動的方向數量
+          let possibleDirections = 0;
+          
+          // 檢查四個方向
+          if (y > 0 && this.isFloorSpace({y: y-1, x})) possibleDirections++; // 上
+          if (y < this.height-1 && this.isFloorSpace({y: y+1, x})) possibleDirections++; // 下
+          if (x > 0 && this.isFloorSpace({y, x: x-1})) possibleDirections++; // 左
+          if (x < this.width-1 && this.isFloorSpace({y, x: x+1})) possibleDirections++; // 右
+          
+          // 如果可以從至少三個方向移動，則這是一個交叉路口
+          if (possibleDirections >= 3) {
+            intersections.push({
+              x: x * 10, // 轉換為遊戲座標系統
+              y: y * 10,
+              directions: possibleDirections
+            });
+          }
+        }
+      }
+    }
+    
+    return intersections;
+  }
+  
+  /**
+   * 獲取距離指定位置最近的交叉路口
+   * @param {Object} position - 當前位置，格式為 {x, y}
+   * @returns {Object} 最近的交叉路口，格式為 {x, y, directions}
+   */
+  getNearestIntersection(position) {
+    if (!this.intersections || this.intersections.length === 0) {
+      return null;
+    }
+    
+    let nearest = null;
+    let minDistance = Infinity;
+    
+    for (const intersection of this.intersections) {
+      const distance = Math.sqrt(
+        Math.pow(position.x - intersection.x, 2) + 
+        Math.pow(position.y - intersection.y, 2)
+      );
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearest = intersection;
+      }
+    }
+    
+    return nearest;
+  }
+
+  /**
+   * 獲取所有交叉路口
+   * @returns {Array} 包含所有交叉路口座標的數組
+   */
+  getAllIntersections() {
+    return this.intersections || [];
   }
 
   switchMap() {
@@ -977,7 +1226,7 @@ class Map {
     let i, j;
     const size = this.blockSize;
 
-        ctx.fillStyle = "#000";
+    ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.width * size, this.height * size);
 
     this.drawWall(ctx);
@@ -985,6 +1234,140 @@ class Map {
     for (i = 0; i < this.height; i += 1) {
       for (j = 0; j < this.width; j += 1) {
         this.drawBlock(i, j, ctx);
+      }
+    }
+  }
+  
+  /**
+   * 繪製地圖中的所有交叉路口
+   * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+   * @param {string} color - 交叉路口的顏色
+   * @param {number} nearestCount - 標記最近的交叉路口數量
+   */
+  drawIntersections(ctx, color = 'rgba(255, 255, 0, 0.4)', nearestCount = 0) {
+    if (!this.intersections) {
+      console.warn("沒有交叉路口可顯示");
+      return;
+    }
+    
+    console.log(`準備繪製交叉路口，總數: ${this.intersections.length}，顯示最近的: ${nearestCount}`);
+    
+    const size = this.blockSize;
+    
+    // 如果需要標記最近的交叉路口，則獲取玩家位置
+    let nearestIntersections = [];
+    if (nearestCount > 0 && typeof user !== 'undefined' && user) {
+      const playerPos = user.getPosition();
+      console.log("玩家位置:", playerPos);
+      
+      // 計算每個交叉路口到玩家的距離
+      const intersectionsWithDistance = this.intersections.map(intersection => {
+        const distance = Math.sqrt(
+          Math.pow(playerPos.x - intersection.x, 2) + 
+          Math.pow(playerPos.y - intersection.y, 2)
+        );
+        
+        return { ...intersection, distance };
+      });
+      
+      // 按距離排序
+      intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+      
+      // 獲取最近的 n 個交叉路口
+      nearestIntersections = intersectionsWithDistance.slice(0, nearestCount);
+      
+      // 調試輸出
+      console.log(`找到 ${nearestIntersections.length} 個最近的交叉路口:`, nearestIntersections);
+    }
+    
+    // 如果只顯示最近的交叉路口，並且找到了最近的交叉路口
+    if (nearestCount > 0 && nearestIntersections.length > 0) {
+      // 顏色數組 - 從紅色到黃色的漸變
+      const colors = [
+        'rgba(255, 0, 0, 0.8)',    // 深紅色 - 最近
+        'rgba(255, 128, 0, 0.8)',  // 橙色 - 第二近
+        'rgba(255, 255, 0, 0.8)'   // 黃色 - 第三近
+      ];
+      
+      // 繪製最近的幾個交叉路口
+      for (let i = 0; i < nearestIntersections.length; i++) {
+        const intersection = nearestIntersections[i];
+        const x = (intersection.x / 10) * size;
+        const y = (intersection.y / 10) * size;
+        
+        // 根據距離選擇顏色和大小
+        const colorIndex = Math.min(i, colors.length - 1);
+        const sizeMultiplier = i === 0 ? 1.5 : (i === 1 ? 1.3 : 1.1); // 根據距離調整大小
+        
+        // 使用對應顏色
+        ctx.fillStyle = colors[colorIndex];
+        
+        // 繪製交叉路口標記
+        ctx.beginPath();
+        ctx.arc(
+          x + size/2, 
+          y + size/2, 
+          (size/3) * sizeMultiplier, 
+          0, 
+          Math.PI * 2
+        );
+        ctx.fill();
+        
+        // 在交叉路口上顯示可行方向數量和排名
+        ctx.fillStyle = '#fff';
+        ctx.font = i === 0 ? 'bold 9px Arial' : '8px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${i+1}:${intersection.directions}`, x + size/2, y + size/2);
+        
+        // 繪製連接線
+        if (user) {
+          const playerPos = user.getPosition();
+          const playerX = (playerPos.x / 10) * size + size/2;
+          const playerY = (playerPos.y / 10) * size + size/2;
+          
+          // 設置線的顏色和寬度
+          ctx.strokeStyle = colors[colorIndex].replace('0.8', '0.4');
+          ctx.lineWidth = 3 - i * 0.7; // 根據距離調整線寬
+          
+          // 繪製虛線連接
+          ctx.beginPath();
+          ctx.setLineDash([5, 3]);
+          ctx.moveTo(playerX, playerY);
+          ctx.lineTo(x + size/2, y + size/2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+      
+      console.log(`已繪製 ${nearestIntersections.length} 個最近的交叉路口`);
+    } else {
+      // 繪製所有交叉路口
+      console.log("繪製所有交叉路口");
+      for (const intersection of this.intersections) {
+        // 將遊戲座標轉換為畫布座標
+        const x = (intersection.x / 10) * size;
+        const y = (intersection.y / 10) * size;
+        
+        ctx.fillStyle = color;
+        
+        // 繪製交叉路口標記
+        ctx.beginPath();
+        ctx.arc(
+          x + size/2, 
+          y + size/2, 
+          size/3, 
+          0, 
+          Math.PI * 2
+        );
+        ctx.fill();
+        
+        // 在交叉路口上顯示可行方向數量
+        ctx.fillStyle = '#000';
+        ctx.font = '8px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(intersection.directions, x + size/2, y + size/2);
       }
     }
   }
@@ -1116,7 +1499,9 @@ var PACMAN = (function () {
         timer        = null,
         map          = null,
         user         = null,
-        stored       = null;
+        stored       = null,
+        showIntersections = false, // 添加一個變量來跟踪是否顯示交叉路口
+        showAllIntersections = false; // 添加一個變量來跟踪是否顯示所有交叉路口
 
     function getTick() { 
         return tick;
@@ -1200,12 +1585,73 @@ var PACMAN = (function () {
         for (var i = 0; i < ghosts.length; i += 1) { 
             ghosts[i].reset();
         }
+        
+        // 確認所有鬼魂都在原始位置
+        console.log("所有鬼魂已重置到原始位置");
+        for (var i = 0; i < ghosts.length; i += 1) {
+            const mapX = Math.floor(ghosts[i].position.x / 10);
+            const mapY = Math.floor(ghosts[i].position.y / 10);
+            console.log(`鬼魂 ${i+1} 位置: (${mapX}, ${mapY})`);
+        }
+        
         audio.play("start");
         timerStart = tick;
         setState(COUNTDOWN);
         
         // 在关卡开始时提醒用户可以使用 H 键查看帮助
         console.log("關卡開始！按 H 鍵可以查看功能按鍵幫助");
+        
+        // 如果團隊合作模式已啟用，自動分配最近的三個交叉路口給鬼魂
+        if (window.GHOST_TEAMWORK && map && user) {
+            // 延遲執行，確保用戶位置已正確初始化
+            setTimeout(function() {
+                const playerPos = user.getPosition();
+                const intersections = map.getAllIntersections();
+                
+                // 計算每個交叉路口到玩家的距離
+                const intersectionsWithDistance = intersections.map(intersection => {
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - intersection.x, 2) + 
+                        Math.pow(playerPos.y - intersection.y, 2)
+                    );
+                    return { ...intersection, distance };
+                });
+                
+                // 按距離排序
+                intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+                
+                // 獲取最近的3個交叉路口
+                const nearestThree = intersectionsWithDistance.slice(0, 3);
+                
+                // 確保我們有足夠的鬼魂和交叉路口
+                const assignCount = Math.min(nearestThree.length, ghosts.length);
+                
+                if (assignCount > 0) {
+                    console.group("關卡開始，團隊合作模式已啟用，自動分配交叉路口給鬼魂:");
+                    
+                    // 為每個鬼魂分配一個交叉路口
+                    for (let i = 0; i < assignCount; i++) {
+                        const intersection = nearestThree[i];
+                        const ghost = ghosts[i];
+                        
+                        // 設置鬼魂的目標位置為交叉路口座標
+                        ghost.targetPosition = { x: intersection.x, y: intersection.y };
+                        
+                        // 將遊戲座標轉換為地圖座標（除以10）
+                        const mapX = Math.floor(intersection.x / 10);
+                        const mapY = Math.floor(intersection.y / 10);
+                        
+                        console.log(`鬼魂 ${i+1} (${ghost.id}) 前往交叉路口 ${i+1}: (${mapX}, ${mapY}), 方向數: ${intersection.directions}`);
+                    }
+                    
+                    console.groupEnd();
+                    console.log(`已分配 ${assignCount} 個交叉路口給鬼魂，鬼魂團隊合作模式啟用中`);
+                    
+                    // 顯示對話框告知用戶
+                   // dialog(`團隊合作模式已啟用，${assignCount} 個鬼魂正前往交叉路口`);
+                }
+            }, 500); // 延遲500毫秒以確保用戶位置已初始化
+        }
     }    
 
     function startNewGame() {
@@ -1233,6 +1679,21 @@ var PACMAN = (function () {
             audio.pause();
             map.draw(ctx);
             dialog("Paused");
+        } else if (e.keyCode === KEY.R) {
+            // 按 R 鍵立即重置所有鬼魂到原始位置
+            for (var i = 0; i < ghosts.length; i += 1) { 
+                ghosts[i].reset();
+            }
+            
+            // 確認所有鬼魂都在原始位置
+            console.log("所有鬼魂已手動重置到原始位置");
+            for (var i = 0; i < ghosts.length; i += 1) {
+                const mapX = Math.floor(ghosts[i].position.x / 10);
+                const mapY = Math.floor(ghosts[i].position.y / 10);
+                console.log(`鬼魂 ${i+1} 位置: (${mapX}, ${mapY})`);
+            }
+            
+            dialog("已重置所有鬼魂到原始位置");
         } else if (e.keyCode === KEY.M) {
             const result = map.switchMap();
             console.log(result);
@@ -1258,17 +1719,155 @@ var PACMAN = (function () {
             if (typeof window.updateTeamworkDisplay === 'function') {
                 window.updateTeamworkDisplay();
             }
+            
+            // 當啟用團隊合作模式時，自動分配最近的三個交叉路口給鬼魂
+            if (window.GHOST_TEAMWORK && map && user) {
+                const playerPos = user.getPosition();
+                const intersections = map.getAllIntersections();
+                
+                // 計算每個交叉路口到玩家的距離
+                const intersectionsWithDistance = intersections.map(intersection => {
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - intersection.x, 2) + 
+                        Math.pow(playerPos.y - intersection.y, 2)
+                    );
+                    return { ...intersection, distance };
+                });
+                
+                // 按距離排序
+                intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+                
+                // 獲取最近的3個交叉路口
+                const nearestThree = intersectionsWithDistance.slice(0, 3);
+                
+                // 確保我們有足夠的鬼魂和交叉路口
+                const assignCount = Math.min(nearestThree.length, ghosts.length);
+                
+                if (assignCount > 0) {
+                    console.group("啟用團隊合作，自動分配交叉路口給鬼魂:");
+                    
+                    // 為每個鬼魂分配一個交叉路口
+                    for (let i = 0; i < assignCount; i++) {
+                        const intersection = nearestThree[i];
+                        const ghost = ghosts[i];
+                        
+                        // 設置鬼魂的目標位置為交叉路口座標
+                        ghost.targetPosition = { x: intersection.x, y: intersection.y };
+                        
+                        // 將遊戲座標轉換為地圖座標（除以10）
+                        const mapX = Math.floor(intersection.x / 10);
+                        const mapY = Math.floor(intersection.y / 10);
+                        
+                        console.log(`鬼魂 ${i+1} (${ghost.id}) 前往交叉路口 ${i+1}: (${mapX}, ${mapY}), 方向數: ${intersection.directions}`);
+                    }
+                    
+                    console.groupEnd();
+                    //dialog(`已啟用團隊合作並分配 ${assignCount} 個交叉路口給鬼魂`);
+                }
+            } else if (!window.GHOST_TEAMWORK) {
+                // 當禁用團隊合作模式時，清除鬼魂的目標位置
+                for (let i = 0; i < ghosts.length; i++) {
+                    ghosts[i].targetPosition = null;
+                }
+                //dialog("已禁用團隊合作，鬼魂將不再前往指定交叉路口");
+            }
         } else if (e.keyCode === KEY.T) {
-            // 按 T 键测试墙壁生成逻辑
-            const result = testWallGeneration();
-            console.log(result);
-            alert("墙壁生成逻辑测试完成，已绘制所有相邻墙壁！请查看控制台获取详细信息。");
-            map.draw(ctx);
+            // 設置所有鬼魂的目標位置為 Pacman 當前位置
+            const pacmanPos = user.getPosition();
+            if (pacmanPos) {
+                // 將所有鬼魂的目標設為 Pacman 當前位置
+                for (let i = 0; i < ghosts.length; i++) {
+                    ghosts[i].targetPosition = { x: pacmanPos.x, y: pacmanPos.y };
+                }
+                
+                // 轉換為地圖座標顯示
+                const mapX = Math.floor(pacmanPos.x / 10);
+                const mapY = Math.floor(pacmanPos.y / 10);
+                
+                console.log(`已設置所有鬼魂目標位置為 Pacman 當前位置: (${mapX}, ${mapY})`);
+                dialog(`鬼魂正在前往座標 (${mapX}, ${mapY})`);
+            } else {
+                console.log("無法獲取 Pacman 位置");
+                dialog("無法獲取 Pacman 位置");
+            }
         } else if (e.keyCode === KEY.D) {
             // 按 D 键显示调试信息
             const result = showDebugInfo();
             console.log(result);
             dialog("调试信息已在控制台显示");
+        } else if (e.keyCode === KEY.F) {
+            // 提示用戶輸入目標座標
+            const xInput = prompt("請輸入目標 X 座標 (0-18):", "");
+            if (xInput === null) return; // 用戶取消
+            
+            const yInput = prompt("請輸入目標 Y 座標 (0-21):", "");
+            if (yInput === null) return; // 用戶取消
+            
+            // 解析座標
+            const x = parseInt(xInput, 10);
+            const y = parseInt(yInput, 10);
+            
+            // 檢查座標有效性
+            if (isNaN(x) || isNaN(y) || x < 0 || x > 18 || y < 0 || y > 21) {
+                alert("無效的座標！X 應在 0-18 範圍內，Y 應在 0-21 範圍內。");
+                return;
+            }
+            
+            // 將地圖座標轉換為遊戲座標 (乘以 10)
+            const gameX = x * 10;
+            const gameY = y * 10;
+            
+            // 檢查該位置是否可行走
+            if (!map.isFloorSpace({y: y, x: x})) {
+                alert(`座標 (${x}, ${y}) 是牆壁或不可行走區域！`);
+                return;
+            }
+            
+            // 設置所有鬼魂的目標位置
+            for (let i = 0; i < ghosts.length; i++) {
+                ghosts[i].targetPosition = { x: gameX, y: gameY };
+            }
+            
+            console.log(`已設置所有鬼魂目標位置為: (${x}, ${y})`);
+            dialog(`鬼魂正在前往座標 (${x}, ${y})`);
+        } else if (e.keyCode === KEY.V) {
+            // 為每個鬼魂單獨設置目標位置
+            for (let i = 0; i < ghosts.length; i++) {
+                const ghostId = ghosts[i].id.split('-')[1];
+                
+                // 提示用戶為當前鬼魂輸入目標座標
+                const xInput = prompt(`為鬼魂 ${ghostId} 輸入目標 X 座標 (0-18)，或按取消跳過:`, "");
+                if (xInput === null) continue; // 用戶跳過此鬼魂
+                
+                const yInput = prompt(`為鬼魂 ${ghostId} 輸入目標 Y 座標 (0-21):`, "");
+                if (yInput === null) continue; // 用戶跳過此鬼魂
+                
+                // 解析座標
+                const x = parseInt(xInput, 10);
+                const y = parseInt(yInput, 10);
+                
+                // 檢查座標有效性
+                if (isNaN(x) || isNaN(y) || x < 0 || x > 18 || y < 0 || y > 21) {
+                    alert(`鬼魂 ${ghostId} 的座標無效！X 應在 0-18 範圍內，Y 應在 0-21 範圍內。`);
+                    continue;
+                }
+                
+                // 將地圖座標轉換為遊戲座標 (乘以 10)
+                const gameX = x * 10;
+                const gameY = y * 10;
+                
+                // 檢查該位置是否可行走
+                if (!map.isFloorSpace({y: y, x: x})) {
+                    alert(`座標 (${x}, ${y}) 是牆壁或不可行走區域！鬼魂 ${ghostId} 將被跳過。`);
+                    continue;
+                }
+                
+                // 設置此鬼魂的目標位置
+                ghosts[i].targetPosition = { x: gameX, y: gameY };
+                console.log(`已設置鬼魂 ${ghostId} 的目標位置為: (${x}, ${y})`);
+            }
+            
+            dialog("已為各鬼魂設置個別目標位置");
         } else if (e.keyCode === KEY.H) {
             // 按 H 键显示帮助信息
             const result = showHelp();
@@ -1282,6 +1881,134 @@ var PACMAN = (function () {
             } else {
                 console.error("地图预览功能不可用");
                 dialog("地图预览功能不可用");
+            }
+        } else if (e.keyCode === KEY.I) {
+            // 按 I 鍵切換顯示交叉路口
+            showIntersections = !showIntersections;
+            const status = showIntersections ? "顯示" : "隱藏";
+            console.log(`交叉路口已${status}`);
+            //dialog(`交叉路口已${status}`);
+            
+            // 如果啟用了交叉路口顯示，則輸出最近的三個交叉路口座標
+            if (showIntersections && map && user) {
+                const playerPos = user.getPosition();
+                const intersections = map.getAllIntersections();
+                
+                // 計算每個交叉路口到玩家的距離
+                const intersectionsWithDistance = intersections.map(intersection => {
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - intersection.x, 2) + 
+                        Math.pow(playerPos.y - intersection.y, 2)
+                    );
+                    return { ...intersection, distance };
+                });
+                
+                // 按距離排序
+                intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+                
+                // 獲取最近的3個交叉路口
+                const nearestThree = intersectionsWithDistance.slice(0, 3);
+                
+                console.group("最近的三個交叉路口座標:");
+                nearestThree.forEach((intersection, index) => {
+                    // 將遊戲座標轉換為地圖座標（除以10）
+                    const mapX = Math.floor(intersection.x / 10);
+                    const mapY = Math.floor(intersection.y / 10);
+                    console.log(`${index + 1}. 地圖座標: (${mapX}, ${mapY}), 距離: ${intersection.distance.toFixed(2)}, 方向數: ${intersection.directions}`);
+                });
+                console.groupEnd();
+            }
+            
+            // 重繪地圖
+            map.draw(ctx);
+            if (showIntersections) {
+                map.drawIntersections(ctx, 'rgba(255, 255, 0, 0.4)', 3); // 顯示最近的3個交叉路口
+            }
+        } else if (e.keyCode === KEY.J) {
+            // 按 J 鍵將最近的三個交叉路口分配給三個鬼魂
+            if (window.GHOST_TEAMWORK && map && user) {
+                const playerPos = user.getPosition();
+                const intersections = map.getAllIntersections();
+                
+                // 計算每個交叉路口到玩家的距離
+                const intersectionsWithDistance = intersections.map(intersection => {
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - intersection.x, 2) + 
+                        Math.pow(playerPos.y - intersection.y, 2)
+                    );
+                    return { ...intersection, distance };
+                });
+                
+                // 按距離排序
+                intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+                
+                // 獲取最近的3個交叉路口
+                const nearestThree = intersectionsWithDistance.slice(0, 3);
+                
+                // 確保我們有足夠的鬼魂和交叉路口
+                const assignCount = Math.min(nearestThree.length, ghosts.length);
+                
+                if (assignCount > 0) {
+                    console.group("分配交叉路口給鬼魂:");
+                    
+                    // 為每個鬼魂分配一個交叉路口
+                    for (let i = 0; i < assignCount; i++) {
+                        const intersection = nearestThree[i];
+                        const ghost = ghosts[i];
+                        
+                        // 設置鬼魂的目標位置為交叉路口座標
+                        ghost.targetPosition = { x: intersection.x, y: intersection.y };
+                        
+                        // 將遊戲座標轉換為地圖座標（除以10）
+                        const mapX = Math.floor(intersection.x / 10);
+                        const mapY = Math.floor(intersection.y / 10);
+                        
+                        console.log(`鬼魂 ${i+1} (${ghost.id}) 前往交叉路口 ${i+1}: (${mapX}, ${mapY}), 方向數: ${intersection.directions}`);
+                    }
+                    
+                    console.groupEnd();
+                    dialog(`已分配 ${assignCount} 個交叉路口給鬼魂`);
+                } else {
+                    console.log("沒有找到交叉路口或沒有可用的鬼魂");
+                    dialog("沒有找到交叉路口或沒有可用的鬼魂");
+                }
+            } else {
+                console.log("需要啟用團隊合作模式 (按 G 鍵) 才能使用此功能");
+                dialog("請先啟用團隊合作模式 (按 G 鍵)");
+            }
+        } else if (e.keyCode === KEY.K) {
+            // 按 K 鍵切換顯示所有交叉路口
+            showAllIntersections = !showAllIntersections;
+            
+            // 如果啟用了顯示所有交叉路口，則關閉只顯示最近的交叉路口
+            if (showAllIntersections) {
+                showIntersections = false;
+            }
+            
+            const status = showAllIntersections ? "顯示" : "隱藏";
+            console.log(`所有交叉路口已${status}`);
+            dialog(`所有交叉路口已${status}`);
+            
+            // 如果啟用了顯示所有交叉路口，則輸出交叉路口總數
+            if (showAllIntersections && map) {
+                const intersections = map.getAllIntersections();
+                console.log(`地圖上共有 ${intersections.length} 個交叉路口`);
+                
+                // 將所有交叉路口的座標輸出到控制台
+                console.group("所有交叉路口座標:");
+                intersections.forEach((intersection, index) => {
+                    // 將遊戲座標轉換為地圖座標（除以10）
+                    const mapX = Math.floor(intersection.x / 10);
+                    const mapY = Math.floor(intersection.y / 10);
+                    console.log(`${index + 1}. 地圖座標: (${mapX}, ${mapY}), 方向數: ${intersection.directions}`);
+                });
+                console.groupEnd();
+            }
+            
+            // 重繪地圖
+            map.draw(ctx);
+            if (showAllIntersections) {
+                map.drawIntersections(ctx, 'rgba(0, 255, 255, 0.4)', 0); // 顯示所有交叉路口，使用青色
             }
         } else if (state !== PAUSE) {   
             return user.keyDown(e);
@@ -1346,7 +2073,6 @@ var PACMAN = (function () {
     }
 
     function mainDraw() { 
-
         var diff, u, i, len, nScore;
         
         ghostPos = [];
@@ -1365,6 +2091,52 @@ var PACMAN = (function () {
             ghosts[i].draw(ctx);
         }                     
         user.draw(ctx);
+        
+        // 如果啟用了交叉路口顯示，則繪製交叉路口
+        if (showIntersections) {
+            map.drawIntersections(ctx, 'rgba(255, 255, 0, 0.4)', 3); // 顯示最近的3個交叉路口
+            
+            // 每10幀更新一次控制台中的交叉路口信息（避免過多輸出）
+            if (tick % 10 === 0) {
+                const playerPos = user.getPosition();
+                const intersections = map.getAllIntersections();
+                
+                // 計算每個交叉路口到玩家的距離
+                const intersectionsWithDistance = intersections.map(intersection => {
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - intersection.x, 2) + 
+                        Math.pow(playerPos.y - intersection.y, 2)
+                    );
+                    return { ...intersection, distance };
+                });
+                
+                // 按距離排序
+                intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+                
+                // 獲取最近的3個交叉路口
+                const nearestThree = intersectionsWithDistance.slice(0, 3);
+                
+                // 使用 console.clear() 清除之前的輸出，使顯示更清晰
+                // console.clear();
+                console.log(`%c當前位置: (${Math.floor(playerPos.x/10)}, ${Math.floor(playerPos.y/10)})`, 'color: cyan; font-weight: bold');
+                console.log("%c最近的三個交叉路口座標:", 'color: yellow; font-weight: bold');
+                nearestThree.forEach((intersection, index) => {
+                    const colors = ['color: red; font-weight: bold', 'color: orange', 'color: yellow'];
+                    // 將遊戲座標轉換為地圖座標（除以10）
+                    const mapX = Math.floor(intersection.x / 10);
+                    const mapY = Math.floor(intersection.y / 10);
+                    console.log(
+                        `%c${index + 1}. 地圖座標: (${mapX}, ${mapY}), 距離: ${intersection.distance.toFixed(1)}, 方向數: ${intersection.directions}`,
+                        colors[index]
+                    );
+                });
+            }
+        }
+        
+        // 如果啟用了顯示所有交叉路口，則繪製所有交叉路口
+        if (showAllIntersections) {
+            map.drawIntersections(ctx, 'rgba(0, 255, 255, 0.4)', 0); // 顯示所有交叉路口，使用青色
+        }
         
         userPos = u["new"];
         
@@ -1386,8 +2158,7 @@ var PACMAN = (function () {
                 }
             }
         }                             
-        console.log('目前鬼魂數量:', ghosts.length);
-    };
+    }
 
     function mainLoop() {
 
@@ -1723,7 +2494,7 @@ var PACMAN = (function () {
 }());
 
 /* Human readable keyCode index */
-var KEY = {'BACKSPACE': 8, 'TAB': 9, 'NUM_PAD_CLEAR': 12, 'ENTER': 13, 'SHIFT': 16, 'CTRL': 17, 'ALT': 18, 'PAUSE': 19, 'CAPS_LOCK': 20, 'ESCAPE': 27, 'SPACEBAR': 32, 'PAGE_UP': 33, 'PAGE_DOWN': 34, 'END': 35, 'HOME': 36, 'ARROW_LEFT': 37, 'ARROW_UP': 38, 'ARROW_RIGHT': 39, 'ARROW_DOWN': 40, 'PRINT_SCREEN': 44, 'INSERT': 45, 'DELETE': 46, 'SEMICOLON': 59, 'WINDOWS_LEFT': 91, 'WINDOWS_RIGHT': 92, 'SELECT': 93, 'NUM_PAD_ASTERISK': 106, 'NUM_PAD_PLUS_SIGN': 107, 'NUM_PAD_HYPHEN-MINUS': 109, 'NUM_PAD_FULL_STOP': 110, 'NUM_PAD_SOLIDUS': 111, 'NUM_LOCK': 144, 'SCROLL_LOCK': 145, 'SEMICOLON': 186, 'EQUALS_SIGN': 187, 'COMMA': 188, 'HYPHEN-MINUS': 189, 'FULL_STOP': 190, 'SOLIDUS': 191, 'GRAVE_ACCENT': 192, 'LEFT_SQUARE_BRACKET': 219, 'REVERSE_SOLIDUS': 220, 'RIGHT_SQUARE_BRACKET': 221, 'APOSTROPHE': 222, 'M': 77, 'G': 71, 'T': 84, 'D': 68, 'H': 72, 'A': 65, 'C': 67};
+var KEY = {'BACKSPACE': 8, 'TAB': 9, 'NUM_PAD_CLEAR': 12, 'ENTER': 13, 'SHIFT': 16, 'CTRL': 17, 'ALT': 18, 'PAUSE': 19, 'CAPS_LOCK': 20, 'ESCAPE': 27, 'SPACEBAR': 32, 'PAGE_UP': 33, 'PAGE_DOWN': 34, 'END': 35, 'HOME': 36, 'ARROW_LEFT': 37, 'ARROW_UP': 38, 'ARROW_RIGHT': 39, 'ARROW_DOWN': 40, 'PRINT_SCREEN': 44, 'INSERT': 45, 'DELETE': 46, 'SEMICOLON': 59, 'WINDOWS_LEFT': 91, 'WINDOWS_RIGHT': 92, 'SELECT': 93, 'NUM_PAD_ASTERISK': 106, 'NUM_PAD_PLUS_SIGN': 107, 'NUM_PAD_HYPHEN-MINUS': 109, 'NUM_PAD_FULL_STOP': 110, 'NUM_PAD_SOLIDUS': 111, 'NUM_LOCK': 144, 'SCROLL_LOCK': 145, 'SEMICOLON': 186, 'EQUALS_SIGN': 187, 'COMMA': 188, 'HYPHEN-MINUS': 189, 'FULL_STOP': 190, 'SOLIDUS': 191, 'GRAVE_ACCENT': 192, 'LEFT_SQUARE_BRACKET': 219, 'REVERSE_SOLIDUS': 220, 'RIGHT_SQUARE_BRACKET': 221, 'APOSTROPHE': 222, 'M': 77, 'G': 71, 'T': 84, 'D': 68, 'H': 72, 'A': 65, 'C': 67, 'I': 73, 'F': 70, 'V': 86};
 
 (function () {
 	/* 0 - 9 */
@@ -2135,32 +2906,107 @@ function testWallGeneration() {
 }
 
 /**
- * 显示游戏状态信息，用于调试
- * 可通过按 D 键触发
+ * 顯示遊戲狀態信息，用於調試
+ * 可通過按 D 鍵觸發
  */
 function showDebugInfo() {
-  console.group("🔍 游戏状态信息");
-  console.log("当前关卡:", level);
-  console.log("当前地图:", map.level + 1);
-  console.log("地图尺寸:", map.width, "x", map.height);
-  console.log("豆子总数:", map.totalDots);
+  console.group("🔍 遊戲狀態信息");
+  console.log("當前關卡:", level);
+  console.log("當前地圖:", map.level + 1);
+  console.log("地圖尺寸:", map.width, "x", map.height);
+  console.log("豆子總數:", map.totalDots);
   console.log("已吃豆子:", user.eaten);
-  console.log("还需吃豆子:", map.totalDots - user.eaten);
-  console.log("玩家位置:", user.position);
+  console.log("還需吃豆子:", map.totalDots - user.eaten);
+  // 將玩家位置轉換為地圖座標
+  const playerMapX = Math.floor(user.position.x / 10);
+  const playerMapY = Math.floor(user.position.y / 10);
+  console.log("玩家位置 (地圖座標):", `(${playerMapX}, ${playerMapY})`);
   console.log("玩家方向:", user.direction);
   console.log("玩家生命:", user.getLives());
-  console.log("玩家分数:", user.theScore());
-  console.log("鬼魂数量:", ghosts.length);
+  console.log("玩家分數:", user.theScore());
+  console.log("鬼魂數量:", ghosts.length);
+  
+  // 顯示交叉路口信息
+  const intersections = map.getAllIntersections();
+  console.log("交叉路口總數:", intersections.length);
+  
+  // 顯示玩家最近的3個交叉路口
+  if (user && user.position) {
+    // 計算每個交叉路口到玩家的距離
+    const intersectionsWithDistance = intersections.map(intersection => {
+      const distance = Math.sqrt(
+        Math.pow(user.position.x - intersection.x, 2) + 
+        Math.pow(user.position.y - intersection.y, 2)
+      );
+      return { ...intersection, distance };
+    });
+    
+    // 按距離排序
+    intersectionsWithDistance.sort((a, b) => a.distance - b.distance);
+    
+    // 獲取最近的3個交叉路口
+    const nearestThree = intersectionsWithDistance.slice(0, 3);
+    
+    console.group("📍 最近的3個交叉路口詳細信息:");
+    nearestThree.forEach((intersection, index) => {
+      // 計算交叉路口的方向（相對於玩家）
+      let directionFromPlayer = "";
+      const dx = intersection.x - user.position.x;
+      const dy = intersection.y - user.position.y;
+      
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // 水平方向更顯著
+        directionFromPlayer += dx > 0 ? "右" : "左";
+        if (Math.abs(dy) > 5) {
+          directionFromPlayer += dy > 0 ? "下" : "上";
+        }
+      } else {
+        // 垂直方向更顯著
+        directionFromPlayer += dy > 0 ? "下" : "上";
+        if (Math.abs(dx) > 5) {
+          directionFromPlayer += dx > 0 ? "右" : "左";
+        }
+      }
+      
+      // 確定可行走的方向
+      const directions = [];
+      if (map.isFloorSpace({y: Math.floor(intersection.y/10), x: Math.floor(intersection.x/10) - 1})) directions.push("左");
+      if (map.isFloorSpace({y: Math.floor(intersection.y/10), x: Math.floor(intersection.x/10) + 1})) directions.push("右");
+      if (map.isFloorSpace({y: Math.floor(intersection.y/10) - 1, x: Math.floor(intersection.x/10)})) directions.push("上");
+      if (map.isFloorSpace({y: Math.floor(intersection.y/10) + 1, x: Math.floor(intersection.x/10)})) directions.push("下");
+      
+      // 將遊戲座標轉換為地圖座標
+      const mapX = Math.floor(intersection.x / 10);
+      const mapY = Math.floor(intersection.y / 10);
+      
+      const colors = ['color: red; font-weight: bold', 'color: orange', 'color: yellow'];
+      console.log(
+        `%c${index + 1}. 地圖座標: (${mapX}, ${mapY})`,
+        colors[index]
+      );
+      console.log(
+        `   距離: ${intersection.distance.toFixed(2)}, 方向: ${directionFromPlayer}, 可行走方向: ${directions.join(", ")}`
+      );
+      console.log(
+        `   方向數: ${intersection.directions}`
+      );
+    });
+    console.groupEnd();
+  }
   
   console.log("鬼魂位置:");
   for (let i = 0; i < ghosts.length; i++) {
     console.log(`- 鬼魂 ${i+1}:`, ghosts[i].position, "方向:", ghosts[i].direction);
   }
   
-  console.log("游戏状态:", state);
+  console.log("遊戲狀態:", state);
+  
+  // 在地圖上顯示交叉路口，並標記最近的3個
+  map.drawIntersections(ctx, 'rgba(255, 255, 0, 0.4)', 3);
+  
   console.groupEnd();
   
-  return "游戏状态信息已在控制台显示";
+  return "遊戲狀態信息已在控制台顯示，交叉路口已在地圖上標記";
 }
 
 /**
@@ -2175,11 +3021,14 @@ function showHelp() {
   console.log("P 键 - 暂停/继续游戏");
   console.log("M 键 - 切换地图 (在四个地图之间循环)");
   console.log("S 键 - 开启/关闭音效");
-  console.log("G 键 - 更新当前地图的墙壁");
+  console.log("G 键 - 切換鬼魂團隊合作模式");
   console.log("T 键 - 测试墙壁生成逻辑");
   console.log("D 键 - 显示游戏调试信息");
   console.log("H 键 - 显示/隐藏此帮助");
   console.log("C 键 - 切换鬼魂模式 (智能追逐/随机移动)");
+  console.log("I 键 - 显示/隐藏最近的三個交叉路口");
+  console.log("K 键 - 显示/隐藏所有交叉路口");
+  console.log("J 键 - 分配最近的三個交叉路口給鬼魂 (需啟用團隊合作)");
   console.groupEnd();
   
   // 在游戏界面显示简短帮助信息
@@ -2262,8 +3111,14 @@ function showHelp() {
       {key: "A", desc: "显示所有地图预览"},
       {key: "S", desc: "开启/关闭音效"},
       {key: "C", desc: "切换鬼魂模式 (智能追逐/随机移动)"},
-      {key: "G", desc: "更新当前地图的墙壁"},
-      {key: "T", desc: "测试墙壁生成逻辑"},
+      {key: "G", desc: "切換鬼魂團隊合作模式"},
+      {key: "I", desc: "显示/隐藏最近的三個交叉路口"},
+      {key: "K", desc: "显示/隐藏所有交叉路口"},
+      {key: "J", desc: "分配最近的三個交叉路口給鬼魂 (需啟用團隊合作)"},
+      {key: "T", desc: "設置鬼魂目標為 Pacman 當前位置"},
+      {key: "F", desc: "設置鬼魂目標為指定座標"},
+      {key: "V", desc: "為每個鬼魂設置個別目標座標"},
+      {key: "R", desc: "重置所有鬼魂到原始位置"},
       {key: "D", desc: "显示游戏调试信息"},
       {key: "H", desc: "显示/隐藏此帮助"}
     ];
